@@ -8,7 +8,7 @@
 
 ## 1. Overview
 
-Build an end-to-end content pipeline that detects real-time financial events from multiple APIs, generates AI-powered text and visual content, queues it for human review in a mobile-responsive web dashboard, and assists the user in posting to Twitter/X manually.
+Build an end-to-end content pipeline that detects real-time financial events from multiple APIs, generates AI-powered text and visual content, queues it for human review in a mobile-responsive web dashboard, and automatically posts approved content to Twitter/X via API.
 
 This is the foundational sub-project of ViralEngine. It delivers the core loop (detect → generate → review → post) while establishing the plugin architecture and generic data model that all future sub-projects build on.
 
@@ -17,13 +17,11 @@ This is the foundational sub-project of ViralEngine. It delivers the core loop (
 - Event detection from CoinGecko and exchangerate.host APIs
 - AI-generated tweet text (Claude or OpenAI) from detected events
 - Visual content generation (HTML/CSS → Puppeteer screenshot)
-- Web dashboard for content review (approve/edit/reject)
-- Manual-assisted posting (copy text, download image, open Twitter compose)
+- Web dashboard for content review (approve/edit/reject) and post monitoring
+- Automated posting to Twitter/X via API (pay-per-use, ~cents per post)
 - Generic data model (Postgres + JSONB) designed for multi-vertical, multi-platform, multi-account expansion
 
 ### What this sub-project does NOT deliver
-
-- Automated posting via platform APIs (future — cost-dependent)
 - Metrics collection from platforms (Sub-project #2)
 - Multi-vertical support (Sub-project #3 — but the data model supports it from day one)
 - Learning engine (Sub-project #5)
@@ -55,10 +53,11 @@ ViralEngine is decomposed into independent sub-projects, each with its own spec 
 | Backend | TypeScript / Node.js | Single language front-to-back, fast prototyping, strong ecosystem for APIs/scraping/Puppeteer |
 | Frontend | React / TypeScript | Web dashboard for content review, mobile-responsive |
 | Database | PostgreSQL + JSONB | Generic schema, flexible payloads for vertical/platform-specific data |
-| Visual generation (day 1) | HTML/CSS → Puppeteer screenshot | Zero cost, deterministic, proven pattern (earthquake bot) |
+| Visual generation (day 1) | HTML/CSS → Puppeteer screenshot (static PNG) | Zero cost, deterministic, proven pattern. GIF animation deferred to future. |
 | Visual generation (future) | Gemini / Imagen 3 | Pluggable via DI, configured per vertical |
 | LLM (day 1) | Claude or OpenAI | Pluggable per task type and model level |
-| Hosting (day 1) | Docker Compose (local) | Deploy decision deferred, target < $200/month |
+| Hosting (day 1) | Docker Compose for app only (web + worker) | Postgres is external — user provides connection config via env vars |
+| Database migrations | Drizzle Kit | Schema-as-TypeScript, auto-generates SQL migrations, excellent JSONB support, lightweight |
 | Job queue (day 1) | Postgres-backed table | Zero extra infra, pluggable interface for future BullMQ/Redis swap |
 
 ---
@@ -105,35 +104,80 @@ A shared codebase with two process entry points: a **web process** (dashboard + 
    → Polls data sources at configured intervals
    → CoinGecko: every 60s for price data
    → exchangerate.host: every 300s for forex rates
+   → Each provider adapter normalizes raw API response into DetectedEvent(s)
+   → Empty/malformed API responses are logged and skipped (no job created, non-retryable)
 
 2. EVENT DETECTION (worker process)
-   → Evaluates trigger_rules against incoming data
-   → Example: "gold_usd change_pct > 1.0" → fire
+   → Evaluates trigger_rules against DetectedEvent(s)
+   → Respects fire_mode: "threshold_cross" only fires on transition (was below, now above)
+   → Respects cooldown_ms: skips if rule fired within cooldown window
+   → Updates trigger_rule.last_fired_at on fire
+   → Events matching no rule or no template are logged as ignored (no downstream job)
    → Creates a job: { type: "generate-content", event_data: {...} }
 
 3. CONTENT GENERATION (worker process, picked up from job queue)
+   → Creates content_item with generation_status = "generating", review_status = "draft"
    → Selects matching content_template(s) for the event
    → Sends prompt to LLM (Claude/OpenAI) with event data + template
-   → Generates text content
+   → Generates text content, stores in content_item.generated_text
    → Creates a job: { type: "generate-visual", content_item_id: ... }
+   → On LLM failure: sets generation_status = "failed", job retries per max_attempts
 
 4. VISUAL GENERATION (worker process, picked up from job queue)
    → Renders HTML template with content data
-   → Puppeteer screenshots it as PNG/GIF
-   → Stores image, updates content_item with visual_url
-   → Sets content_item.review_status = "pending"
+   → Puppeteer screenshots it as static PNG (GIF animation deferred to future)
+   → Stores PNG to local Docker volume (served by web process under /assets/)
+   → Updates content_item: visual_url = "/assets/<id>.png"
+   → Sets generation_status = "ready", review_status = "pending"
+   → Only items with review_status = "pending" appear in the human review queue
 
 5. HUMAN REVIEW (web dashboard)
-   → User sees pending content items with text + visual preview
-   → Approve / Edit / Reject
-   → Approved items become available for posting
+   → User sees items where generation_status = "ready" AND review_status = "pending"
+   → Approve: atomic UPDATE review_status = "approved" WHERE review_status = "pending"
+     (only proceeds if exactly 1 row affected — prevents duplicate approval from concurrent clicks)
+   → Edit: user modifies text → stored in final_text, sets edited_at, then approve
+   → Reject: sets review_status = "rejected", user can add review_notes
+   → On successful approval: system creates one posts row per active account for this vertical
+     with status = "ready", linked to the vertical's default active Twitter account
+     (MVP supports exactly one active account per vertical)
+     UNIQUE(content_id, account_id) prevents duplicate post rows
+   → Enqueues a job: { type: "post-to-platform", post_id: ... }
 
-6. POSTING ASSIST (web dashboard)
-   → For approved items: "Copy text" button, "Download image" button
-   → "Open Twitter compose" link
-   → User posts manually (~30 seconds)
-   → User marks as "posted" in dashboard
+6. AUTOMATED POSTING (worker process, picked up from job queue)
+   → Picks up post-to-platform jobs
+   → Resolves PostingStrategy from account config (day 1: Twitter API)
+   → Posts tweet with text (final_text if edited, else generated_text) + image attachment
+   → On success: sets post.status = "posted", posted_at = now(), platform_post_id = tweet ID
+   → On failure: job retries per max_attempts, post.status = "failed" after exhaustion
+   → Dashboard shows post status in real-time (posted/failed/pending)
 ```
+
+### 4.3 Canonical Event Model
+
+Every `DataSourceProvider` adapter must normalize raw API responses into a `DetectedEvent` before trigger rule evaluation. This ensures rules are written against a consistent contract regardless of data source.
+
+```typescript
+interface DetectedEvent {
+  source: string;           // "coingecko", "exchangerate"
+  instrument: string;       // "XAU/USD", "EUR/TRY", "USD/TRY"
+  baseCurrency: string;     // "XAU", "EUR", "USD"
+  quoteCurrency: string;    // "USD", "TRY", "TRY"
+  price: number;            // current price
+  previousPrice: number;    // price at start of lookback window
+  changePct: number;        // percentage change within lookback window
+  observedAt: Date;         // when the price was observed
+  rawPayload: Record<string, unknown>;  // original API response (stored in event_data JSONB)
+}
+```
+
+Trigger rules evaluate against `DetectedEvent` fields. The `rawPayload` is preserved in `content_items.event_data` for prompt enrichment and debugging.
+
+### 4.4 Asset Storage
+
+Generated visuals (PNG files) are stored on a named Docker volume shared between the web and worker processes.
+
+- **Day 1:** Docker volume mounted at `/app/assets/` in both `web` and `worker` containers. Web process serves files under `/assets/` path. `content_items.visual_url` stores the relative path (e.g., `/assets/<content_item_id>.png`).
+- **Future:** Pluggable `AssetStore` interface. Swap to S3-compatible storage (AWS S3, MinIO, Cloudflare R2) when deploying to production. The interface: `store(id, buffer) → url` and `resolve(url) → buffer`.
 
 ---
 
@@ -182,35 +226,37 @@ const contentGenerators: Record<string, (config: any) => ContentGenerator> = {
 | `DataSourceProvider` | CoinGecko, ExchangeRateHost | TCMB, MetalPriceAPI, RSS feeds, scrapers |
 | `ContentGenerator` | Claude or OpenAI (text) | Any LLM, per-model selection (Haiku vs Sonnet) |
 | `VisualGenerator` | HTML/CSS → Puppeteer screenshot | Gemini/Imagen 3, Canva API |
-| `PostingStrategy` | Manual-assisted (copy + open compose) | Twitter API, Instagram API, TikTok API |
+| `PostingStrategy` | Twitter/X API (pay-per-use) | Instagram API, TikTok API, manual-assisted fallback |
 | `JobQueue` | Postgres-backed table | BullMQ/Redis, RabbitMQ |
 | `MetricsParser` | (not in MVP) | TwitterMetricsParser, TikTokMetricsParser, etc. |
 
-### 5.3 Vertical Configuration
+### 5.3 Vertical Configuration and Source of Truth
 
-Each vertical stores its plugin configuration in JSONB. The factory/registry resolves implementations at runtime:
+Configuration has a clear hierarchy — **dedicated tables are the source of truth** for their concern. `verticals.config` stores only inherited defaults and vertical-wide settings that don't belong in a dedicated table.
+
+| Concern | Source of Truth | `verticals.config` role |
+|---|---|---|
+| Data source polling | `data_sources` table (provider, config, poll_interval_ms) | Stores default `contentGenerator` and `visualGenerator` provider names |
+| Trigger conditions | `trigger_rules` table (condition, content_config) | Stores vertical-wide defaults (language, tone, brand voice) |
+| Content generation | `content_templates` table (prompt, generation_config) | — |
+| Account/platform targeting | `accounts` table (platform, language, market) | — |
+| Posting strategy | `accounts.config` JSONB (per-account posting config, e.g. `{"postingStrategy": "twitter-api"}`) | — |
+
+**`verticals.config` example — defaults only:**
 
 ```json
 {
-  "dataSources": [
-    { "provider": "coingecko", "config": { "assets": ["bitcoin", "gold"], "pollIntervalMs": 60000 } },
-    { "provider": "exchangerate", "config": { "pairs": ["USD/TRY", "EUR/TRY"], "pollIntervalMs": 300000 } }
-  ],
-  "contentGenerator": {
-    "provider": "claude",
-    "model": "haiku",
-    "promptTemplate": "vertical-gold-forex-v1"
-  },
-  "visualGenerator": {
-    "provider": "puppeteer-html",
-    "template": "price-card-v1"
-  },
-  "postingStrategy": {
-    "provider": "manual-assisted",
-    "platform": "twitter"
+  "defaults": {
+    "contentGenerator": { "provider": "claude", "model": "haiku" },
+    "visualGenerator": { "provider": "puppeteer-html" },
+    "language": "en",
+    "tone": "informative",
+    "brandVoice": "data-driven, concise, no hype"
   }
 }
 ```
+
+**Resolution order:** Template-level `generation_config` → vertical-level `config.defaults` → system defaults. More specific always wins.
 
 ---
 
@@ -248,7 +294,7 @@ CREATE TABLE accounts (
     name            TEXT NOT NULL,  -- "Gold Forex EN", "Altın Döviz TR"
     language        TEXT NOT NULL,  -- "en", "tr", "vi"
     market          TEXT NOT NULL DEFAULT 'global',  -- "global", "turkey", "sea"
-    credentials     JSONB NOT NULL DEFAULT '{}',  -- encrypted API keys (when automated posting)
+    credentials     JSONB NOT NULL DEFAULT '{}',  -- API keys/tokens for automated posting (Twitter OAuth, etc.)
     config          JSONB NOT NULL DEFAULT '{}',  -- platform-specific settings
     status          TEXT NOT NULL DEFAULT 'active',
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -271,8 +317,14 @@ CREATE TABLE trigger_rules (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     vertical_id     UUID NOT NULL REFERENCES verticals(id),
     name            TEXT NOT NULL,
-    condition       JSONB NOT NULL,  -- { "field": "change_pct", "operator": "gt", "value": 1.0 }
+    condition       JSONB NOT NULL,  -- canonical shape: { "match": { "source": "coingecko", "instrument": "XAU/USD" }, "predicate": { "field": "changePct", "operator": "gt", "value": 1.0 } }
+                                       -- "match" filters which DetectedEvents this rule applies to (all fields optional, omitted = match any)
+                                       -- "predicate" evaluates against matching events; MVP supports single predicate only (compound predicates deferred)
+    fire_mode       TEXT NOT NULL DEFAULT 'threshold_cross',  -- "threshold_cross", "stateful_true", "every_poll"
+    cooldown_ms     INT NOT NULL DEFAULT 3600000,  -- minimum ms between firings (default: 1 hour)
+    lookback_window_ms INT NOT NULL DEFAULT 300000,  -- window for change calculation (default: 5 min)
     content_config  JSONB NOT NULL DEFAULT '{}',  -- which templates/layers to activate
+    last_fired_at   TIMESTAMPTZ,  -- dedup: when this rule last fired
     enabled         BOOLEAN NOT NULL DEFAULT true,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -301,9 +353,12 @@ CREATE TABLE content_items (
     template_id     UUID REFERENCES content_templates(id),
     event_data      JSONB NOT NULL DEFAULT '{}',  -- raw event that triggered generation
     generated_text  TEXT,
-    visual_url      TEXT,  -- path/URL to generated image/GIF
-    review_status   TEXT NOT NULL DEFAULT 'pending',  -- "pending", "approved", "rejected", "edited"
+    visual_url      TEXT,  -- relative path to generated PNG (e.g., /assets/<id>.png)
+    generation_status TEXT NOT NULL DEFAULT 'generating',  -- "generating", "ready", "failed"
+    review_status   TEXT NOT NULL DEFAULT 'draft',  -- "draft", "pending", "approved", "rejected"
+    final_text      TEXT,  -- edited text (if user modified generated_text during review)
     review_notes    TEXT,
+    edited_at       TIMESTAMPTZ,
     ai_config       JSONB NOT NULL DEFAULT '{}',  -- exact model, prompt, params used (for A/B tracking)
     cost            JSONB NOT NULL DEFAULT '{}',  -- { "api_tokens": 150, "generation_time_ms": 2300 }
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -311,6 +366,8 @@ CREATE TABLE content_items (
 );
 
 -- Platform-specific posts (linked to accounts, not bare platforms)
+-- Approval is atomic: UPDATE content_items SET review_status = 'approved' WHERE id = $1 AND review_status = 'pending'
+--   Only if the UPDATE affects 1 row, INSERT into posts. This prevents duplicate posts from concurrent approvals.
 CREATE TABLE posts (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     content_id      UUID NOT NULL REFERENCES content_items(id),
@@ -320,10 +377,34 @@ CREATE TABLE posts (
     platform_post_id TEXT,  -- native post ID from the platform (when available)
     metrics         JSONB NOT NULL DEFAULT '{}',  -- platform-specific: { views, likes, shares, ... }
     cost            JSONB NOT NULL DEFAULT '{}',  -- posting cost if using paid API
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE(content_id, account_id)  -- prevents duplicate post rows from concurrent/repeated approvals
 );
 
 -- Job queue (pluggable interface, day-1 Postgres implementation)
+--
+-- Dequeue contract:
+--   SELECT ... WHERE status = 'pending' AND scheduled_at <= now()
+--     ORDER BY scheduled_at FOR UPDATE SKIP LOCKED LIMIT 1
+--
+-- On claim:
+--   SET status = 'processing', locked_by = worker_id, locked_at = now(),
+--       started_at = now(), lease_expires_at = now() + lease_duration
+--   (lease_duration per job type: poll-data-source = 60s, generate-content = 5min, generate-visual = 5min)
+--
+-- On complete:
+--   SET status = 'completed', completed_at = now()
+--
+-- On failure (note: attempts + 1 used in ALL expressions to avoid off-by-one):
+--   SET attempts = attempts + 1,
+--       status = CASE WHEN (attempts + 1) >= max_attempts THEN 'failed' ELSE 'pending' END,
+--       scheduled_at = now() + ((attempts + 1) * interval '30 seconds'),  -- backoff: 30s, 60s, 90s
+--       locked_by = NULL, locked_at = NULL, lease_expires_at = NULL
+--
+-- Stale job recovery (reaper runs every 60s in worker process):
+--   Jobs WHERE status = 'processing' AND lease_expires_at < now()
+--   are reset: SET status = 'pending', locked_by = NULL, locked_at = NULL, lease_expires_at = NULL
+--   Workers may extend leases for legitimately long jobs by updating lease_expires_at before expiry
 CREATE TABLE job_queue (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     type            TEXT NOT NULL,  -- "poll-data-source", "generate-content", "generate-visual"
@@ -331,6 +412,9 @@ CREATE TABLE job_queue (
     status          TEXT NOT NULL DEFAULT 'pending',  -- "pending", "processing", "completed", "failed"
     attempts        INT NOT NULL DEFAULT 0,
     max_attempts    INT NOT NULL DEFAULT 3,
+    locked_by       TEXT,  -- worker instance identifier
+    locked_at       TIMESTAMPTZ,  -- when the worker claimed this job
+    lease_expires_at TIMESTAMPTZ,  -- renewable lease; reaper reclaims expired leases
     scheduled_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     started_at      TIMESTAMPTZ,
     completed_at    TIMESTAMPTZ,
@@ -339,12 +423,14 @@ CREATE TABLE job_queue (
 );
 
 -- Indexes for common query patterns
-CREATE INDEX idx_content_items_review_status ON content_items(review_status) WHERE review_status = 'pending';
+CREATE INDEX idx_content_items_review ON content_items(review_status) WHERE generation_status = 'ready' AND review_status = 'pending';
 CREATE INDEX idx_posts_status ON posts(status) WHERE status = 'ready';
 CREATE INDEX idx_job_queue_pending ON job_queue(scheduled_at) WHERE status = 'pending';
+CREATE INDEX idx_job_queue_stale ON job_queue(lease_expires_at) WHERE status = 'processing';
 CREATE INDEX idx_data_sources_poll ON data_sources(last_polled_at) WHERE status = 'active';
 CREATE INDEX idx_accounts_vertical ON accounts(vertical_id);
 CREATE INDEX idx_content_templates_vertical ON content_templates(vertical_id);
+CREATE INDEX idx_trigger_rules_vertical ON trigger_rules(vertical_id) WHERE enabled = true;
 ```
 
 ### 6.3 Future Schema (additive, no rewrites)
@@ -382,13 +468,37 @@ Time-based analytics (time of day, day of week, seasonality) are computed at que
 
 ---
 
-## 7. Dashboard (Web Process)
+## 7. Bootstrap & Seed Data
 
-### 7.1 Purpose
+### 7.1 Database
+
+PostgreSQL runs externally (not in Docker Compose). The application reads connection config from environment variables (e.g., `DATABASE_URL` or individual `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD`).
+
+### 7.2 Migrations
+
+Managed by **Drizzle Kit**. Schema is defined as TypeScript in the codebase. `drizzle-kit generate` produces SQL migration files. Migrations run via `drizzle-kit migrate` (or programmatically on app startup).
+
+### 7.3 Seed Data
+
+Seed data is a **standalone SQL file** (e.g., `db/seed.sql`), separate from migrations. It is NOT auto-run — the developer runs it manually when setting up a new environment.
+
+**Seed data for Gold/Forex vertical creates:**
+
+- 1 vertical: `gold-forex` (slug: `gold-forex`, status: `active`)
+- 1 account: `Gold Forex EN` (platform: `twitter`, language: `en`, market: `global`)
+- 2 data sources: CoinGecko (gold/XAU price, 60s interval) and exchangerate.host (USD/TRY + EUR/TRY, 300s interval)
+- 2 trigger rules: "Gold moves >1% in 5 min" and "USD/TRY moves >0.5% in 5 min" (with 1-hour cooldown, threshold_cross mode)
+- 2+ content templates: at minimum one L1 "price-alert" template and one L2 "historical-context" template, each with prompt_template and visual_template config
+
+---
+
+## 8. Dashboard (Web Process)
+
+### 8.1 Purpose
 
 Mobile-responsive web dashboard for human content review. The primary interface for the MVP — all interaction happens here.
 
-### 7.2 Core Screens
+### 8.2 Core Screens
 
 **Review Queue:**
 - List of pending content items with text preview + visual thumbnail
@@ -396,17 +506,18 @@ Mobile-responsive web dashboard for human content review. The primary interface 
 - Filter by vertical, template category, content layer
 - Sort by creation time (newest first)
 
-**Post Assist:**
-- For approved items: "Copy text" button, "Download image" button, "Open Twitter compose" link
-- User posts manually, then marks as "posted" in dashboard
-- Shows posting history with status
+**Post Monitor:**
+- Shows all posts with their status: pending (queued for posting), posted (live on platform), failed (with error details)
+- For posted items: shows platform_post_id and posted_at timestamp
+- For failed items: shows error, option to retry
+- Posting history with filters by status
 
 **Vertical Management (basic):**
 - View configured verticals, data sources, trigger rules
 - Enable/disable verticals and rules
 - View content templates
 
-### 7.3 Future Dashboard Additions (not in MVP)
+### 8.3 Future Dashboard Additions (not in MVP)
 
 - Metrics/analytics views (after Sub-project #2)
 - A/B test management (after Sub-project #5)
@@ -415,22 +526,25 @@ Mobile-responsive web dashboard for human content review. The primary interface 
 
 ---
 
-## 8. Key Technical Decisions
+## 9. Key Technical Decisions
 
 | Decision | Choice | Rationale |
 |---|---|---|
 | DI approach | Simple factory/registry | Idiomatic Node.js, more AI-coding-friendly, wide but shallow dependency graph |
 | Job queue | Postgres table, pluggable interface | Zero extra infra day 1, swap to BullMQ/Redis later |
 | Visual gen | Puppeteer HTML screenshot | Zero cost, deterministic, proven pattern |
-| Posting | Manual-assisted (no Twitter API) | Avoids $100/month API cost before proving revenue |
+| Posting | Automated via Twitter/X API (pay-per-use) | ~cents per post, fully automated pipeline end-to-end |
 | Schema philosophy | JSONB for all variable data | Vertical-agnostic, platform-agnostic, no rewrites on expansion |
 | Vertical hierarchy | parent_id self-reference, max 2 levels | Simple, covers known use cases (Dating → Men/Women, Fitness → subverticals) |
 | Multi-account | Dedicated accounts table | One vertical can have multiple platform/language/market combinations |
 | Analytics | Query-time dimension computation | No data warehouse needed at MVP scale |
+| Asset storage | Docker volume, served by web process | Pluggable AssetStore interface for future S3/R2 |
+| Auth | Minimal (single shared secret or basic auth) | Single-user MVP, no full auth system. Revisit for multi-user/B2B. |
+| Visual format | Static PNG only | GIF animation deferred — explicit future design decision when needed |
 
 ---
 
-## 9. Risks and Mitigations
+## 10. Risks and Mitigations
 
 | Risk | Impact | Mitigation |
 |---|---|---|
@@ -438,20 +552,31 @@ Mobile-responsive web dashboard for human content review. The primary interface 
 | Puppeteer crashes in worker | Visual generation stalls | Worker process isolation from dashboard. Job queue retries (max_attempts = 3). |
 | Data source API rate limits | Missed events | Respect poll intervals in config. Exponential backoff. Store last_polled_at to resume. |
 | JSONB queries slow as data grows | Dashboard/analytics latency | Add GIN indexes on JSONB columns. Materialized views when needed. |
-| Manual posting becomes tedious at scale | Bottleneck on human | Designed as pluggable PostingStrategy — swap to API-based when revenue justifies cost. |
+| Twitter/X API rate limits or pricing changes | Posts delayed or cost increases | Pluggable PostingStrategy — can fall back to manual-assisted. Monitor API costs. Respect rate limits with backoff. |
 | Schema needs change we didn't anticipate | Migration pain | JSONB columns absorb most changes without schema migration. Core tables are minimal. |
 
 ---
 
-## 10. Success Criteria for Sub-project #1
+## 11. Success Criteria for Sub-project #1
 
+- [ ] `docker compose up` starts web + worker (connects to external Postgres via env vars)
+- [ ] Drizzle migrations create all Phase 1 tables; standalone `db/seed.sql` populates Gold/Forex vertical, account, data sources, trigger rules, content templates
 - [ ] System polls CoinGecko and exchangerate.host on configured intervals
-- [ ] Trigger rules fire correctly when price conditions are met
+- [ ] Data source adapters normalize responses into DetectedEvent canonical format
+- [ ] Empty/malformed API responses are logged and skipped without creating jobs
+- [ ] Trigger rules fire correctly on threshold crossing with cooldown enforcement
+- [ ] Duplicate triggers are prevented (same rule cannot fire within cooldown window)
+- [ ] Events matching no rule are logged as ignored
 - [ ] AI generates tweet text from event data using configured LLM
-- [ ] Puppeteer generates visual card from HTML template
-- [ ] Content appears in dashboard review queue
-- [ ] User can approve/edit/reject content
-- [ ] Approved content provides copy/download/compose-link for manual posting
-- [ ] User can mark posts as "posted"
-- [ ] All of the above runs via `docker compose up`
+- [ ] Puppeteer generates static PNG visual card from HTML template
+- [ ] Content progresses through generation_status: generating → ready (or failed)
+- [ ] Only fully generated content (generation_status = "ready") appears in review queue
+- [ ] User can approve/edit/reject content in mobile-responsive dashboard
+- [ ] Editing stores final_text separately from generated_text (preserves original for learning)
+- [ ] Approved content creates a posts row and enqueues a post-to-platform job
+- [ ] Worker picks up post job and posts to Twitter/X via API (text + image)
+- [ ] Post status updates to "posted" with platform_post_id on success, "failed" with error on failure
+- [ ] Dashboard shows post status in real-time (posted/failed/pending)
+- [ ] Job queue handles concurrent workers safely (FOR UPDATE SKIP LOCKED)
+- [ ] Stale jobs are recovered automatically (reaper process)
 - [ ] Data model is fully vertical-agnostic (no Gold/Forex-specific columns)
