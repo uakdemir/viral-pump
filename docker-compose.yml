@@ -1,0 +1,19 @@
+services:
+  web:
+    build: .
+    command: npx tsx src/web/index.ts
+    ports:
+      - "${PORT:-3000}:3000"
+    env_file: .env
+    volumes:
+      - assets:/app/assets
+
+  worker:
+    build: .
+    command: npx tsx src/worker/index.ts
+    env_file: .env
+    volumes:
+      - assets:/app/assets
+
+volumes:
+  assets:

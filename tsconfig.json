@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "resolveJsonModule": true,
+    "declaration": true,
+    "paths": {
+      "@shared/*": ["./src/shared/*"],
+      "@plugins/*": ["./src/plugins/*"],
+      "@domain/*": ["./src/domain/*"],
+      "@worker/*": ["./src/worker/*"],
+      "@web/*": ["./src/web/*"]
+    }
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "tests", "src/web/dashboard"]
+}

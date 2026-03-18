@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.env
+assets/
+.superpowers/
+drizzle/meta/
+*.tsbuildinfo
+tmp/
