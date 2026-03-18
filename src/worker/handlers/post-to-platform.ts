@@ -6,10 +6,12 @@ import type { DB } from '../../shared/db.js';
 import type { Job } from '../../plugins/job-queue/types.js';
 import type { PostingStrategy } from '../../plugins/posting-strategies/types.js';
 import type { AssetStore } from '../../plugins/asset-store/types.js';
+import type { PluginRegistry } from '../../plugins/registry.js';
 
 interface PostToPlatformDeps {
   db: DB;
-  postingStrategy: PostingStrategy;
+  postingStrategyRegistry: PluginRegistry<PostingStrategy>;
+  appCredentials: { apiKey: string; apiSecret: string };
   assetStore: AssetStore;
   logger: { info: (...args: any[]) => void; error: (...args: any[]) => void };
 }
@@ -30,6 +32,19 @@ export async function handlePostToPlatform(job: Job, deps: PostToPlatformDeps): 
     .where(eq(accounts.id, accountId));
   if (!account) throw new Error(`Account not found: ${accountId}`);
 
+  // Resolve posting strategy with per-account credentials
+  // App-level keys (API key/secret) come from env, per-account tokens come from DB
+  const accountCreds = account.credentials as Record<string, string>;
+  const accountConfig = account.config as Record<string, string>;
+  const strategyName = accountConfig.postingStrategy ?? 'twitter-api';
+
+  const postingStrategy = deps.postingStrategyRegistry.resolve(strategyName, {
+    apiKey: deps.appCredentials.apiKey,
+    apiSecret: deps.appCredentials.apiSecret,
+    accessToken: accountCreds.accessToken,
+    accessTokenSecret: accountCreds.accessTokenSecret,
+  });
+
   // Use final_text if edited, otherwise generated_text
   const text = item.finalText ?? item.generatedText ?? '';
 
@@ -40,7 +55,7 @@ export async function handlePostToPlatform(job: Job, deps: PostToPlatformDeps): 
   }
 
   try {
-    const result = await deps.postingStrategy.post({ text, imagePath });
+    const result = await postingStrategy.post({ text, imagePath });
 
     await deps.db.update(posts)
       .set({
@@ -50,7 +65,11 @@ export async function handlePostToPlatform(job: Job, deps: PostToPlatformDeps): 
       })
       .where(eq(posts.id, postId));
 
-    deps.logger.info({ postId, platformPostId: result.platformPostId }, 'Posted to platform');
+    deps.logger.info({
+      postId,
+      accountName: account.name,
+      platformPostId: result.platformPostId,
+    }, 'Posted to platform');
   } catch (err) {
     await deps.db.update(posts)
       .set({ status: 'failed' })

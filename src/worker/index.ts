@@ -6,10 +6,12 @@ import { PostgresJobQueue } from '../plugins/job-queue/postgres-queue.js';
 import { PuppeteerHtmlVisualGenerator } from '../plugins/visual-generators/puppeteer-html.js';
 import { LocalVolumeAssetStore } from '../plugins/asset-store/local-volume.js';
 import { TwitterApiPostingStrategy } from '../plugins/posting-strategies/twitter-api.js';
+import { DryRunPostingStrategy } from '../plugins/posting-strategies/dry-run.js';
 import { ClaudeContentGenerator } from '../plugins/content-generators/claude.js';
 import { OpenAIContentGenerator } from '../plugins/content-generators/openai.js';
 import { createRegistry } from '../plugins/registry.js';
 import type { ContentGenerator } from '../plugins/content-generators/types.js';
+import type { PostingStrategy } from '../plugins/posting-strategies/types.js';
 import { Scheduler, createDataSourceRegistry } from './scheduler.js';
 import { EventDetector } from './event-detector.js';
 import { handleGenerateContent } from './handlers/generate-content.js';
@@ -36,16 +38,24 @@ if (config.OPENAI_API_KEY) {
   );
 }
 
-// Posting strategy
-let postingStrategy: TwitterApiPostingStrategy | undefined;
-if (config.TWITTER_API_KEY && config.TWITTER_API_SECRET && config.TWITTER_ACCESS_TOKEN && config.TWITTER_ACCESS_TOKEN_SECRET) {
-  postingStrategy = new TwitterApiPostingStrategy({
-    apiKey: config.TWITTER_API_KEY,
-    apiSecret: config.TWITTER_API_SECRET,
-    accessToken: config.TWITTER_ACCESS_TOKEN,
-    accessTokenSecret: config.TWITTER_ACCESS_TOKEN_SECRET,
-  });
-}
+// Posting strategy registry — app-level keys from env, per-account tokens from DB
+const postingStrategyRegistry = createRegistry<PostingStrategy>();
+postingStrategyRegistry.register('twitter-api', (cfg) =>
+  new TwitterApiPostingStrategy({
+    apiKey: cfg.apiKey,
+    apiSecret: cfg.apiSecret,
+    accessToken: cfg.accessToken,
+    accessTokenSecret: cfg.accessTokenSecret,
+  })
+);
+postingStrategyRegistry.register('dry-run', (cfg) =>
+  new DryRunPostingStrategy({ outputDir: cfg.outputDir ?? './assets/dry-run' })
+);
+
+const appCredentials = {
+  apiKey: config.TWITTER_API_KEY ?? '',
+  apiSecret: config.TWITTER_API_SECRET ?? '',
+};
 
 // Event detector
 const eventDetector = new EventDetector({ db, jobQueue, logger });
@@ -94,8 +104,8 @@ async function processJobs(): Promise<void> {
             await handleGenerateVisual(job, { db, visualGenerator, assetStore, logger });
             break;
           case 'post-to-platform':
-            if (!postingStrategy) throw new Error('Twitter API credentials not configured');
-            await handlePostToPlatform(job, { db, postingStrategy, assetStore, logger });
+            if (!appCredentials.apiKey) throw new Error('TWITTER_API_KEY not configured in env');
+            await handlePostToPlatform(job, { db, postingStrategyRegistry, appCredentials, assetStore, logger });
             break;
           default:
             logger.warn({ type: job.type }, 'Unknown job type');
