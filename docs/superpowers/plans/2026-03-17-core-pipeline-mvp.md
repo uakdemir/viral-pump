@@ -190,7 +190,7 @@ WORKER_ID=worker-1
 ASSET_DIR=./assets
 
 # Web
-PORT=3000
+PORT=3001
 AUTH_SECRET=change-me-in-production
 ```
 
@@ -2016,8 +2016,8 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      '/api': 'http://localhost:3000',
-      '/assets': 'http://localhost:3000',
+      '/api': 'http://localhost:3001',
+      '/assets': 'http://localhost:3001',
     },
   },
 });
@@ -2260,7 +2260,7 @@ services:
     build: .
     command: npx tsx src/web/index.ts
     ports:
-      - "${PORT:-3000}:3000"
+      - "${PORT:-3001}:3001"
     env_file: .env
     volumes:
       - assets:/app/assets
@@ -2285,7 +2285,7 @@ docker compose build
 docker compose up
 ```
 
-Verify: web process starts on port 3000, worker process starts polling, dashboard loads in browser.
+Verify: web process starts on port 3001, worker process starts polling, dashboard loads in browser.
 
 - [ ] **Step 4: Run full test suite**
 
