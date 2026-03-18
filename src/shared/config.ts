@@ -12,7 +12,7 @@ const envSchema = z.object({
   // Per-account access tokens are stored in accounts.credentials JSONB, not in env
   WORKER_ID: z.string().default(`worker-${process.pid}`),
   ASSET_DIR: z.string().default('./assets'),
-  PORT: z.coerce.number().default(3000),
+  PORT: z.coerce.number().default(3001),
   AUTH_SECRET: z.string().default('dev-secret'),
 });
 

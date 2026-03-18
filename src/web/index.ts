@@ -1,35 +1,40 @@
 import 'dotenv/config';
-import express from 'express';
-import cors from 'cors';
+import Fastify from 'fastify';
+import cors from '@fastify/cors';
+import fastifyStatic from '@fastify/static';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { config } from '../shared/config.js';
 import { createDb } from '../shared/db.js';
-import { createChildLogger } from '../shared/logger.js';
 import { PostgresJobQueue } from '../plugins/job-queue/postgres-queue.js';
-import { createApiRouter } from './api/router.js';
+import { createChildLogger } from '../shared/logger.js';
+import { registerContentItemsRoutes } from './api/content-items.js';
+import { registerPostsRoutes } from './api/posts.js';
+import { registerVerticalsRoutes } from './api/verticals.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const logger = createChildLogger({ process: 'web' });
 const db = createDb(config.DATABASE_URL);
 const jobQueue = new PostgresJobQueue(db);
 
-const app = express();
+const app = Fastify({ logger: false });
 
-app.use(cors());
-app.use(express.json());
-
-// Serve generated assets (PNGs)
-app.use('/assets', express.static(path.resolve(config.ASSET_DIR)));
-
-// API routes
-app.use('/api', createApiRouter(db, jobQueue));
-
-// Health check
-app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+await app.register(cors);
+await app.register(fastifyStatic, {
+  root: path.resolve(config.ASSET_DIR),
+  prefix: '/assets/',
 });
 
-app.listen(config.PORT, () => {
+// API routes
+registerContentItemsRoutes(app, db, jobQueue);
+registerPostsRoutes(app, db, jobQueue);
+registerVerticalsRoutes(app, db);
+
+// Health check
+app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
+
+app.listen({ port: config.PORT, host: '0.0.0.0' }, (err) => {
+  if (err) {
+    logger.error({ err }, 'Failed to start');
+    process.exit(1);
+  }
   logger.info({ port: config.PORT }, 'Web server started');
 });

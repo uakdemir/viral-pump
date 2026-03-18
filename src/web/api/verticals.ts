@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import type { FastifyInstance } from 'fastify';
 import { eq } from 'drizzle-orm';
 import { verticals } from '../../shared/schema/verticals.js';
 import { accounts } from '../../shared/schema/accounts.js';
@@ -7,56 +7,42 @@ import { triggerRules } from '../../shared/schema/trigger-rules.js';
 import { contentTemplates } from '../../shared/schema/content-templates.js';
 import type { DB } from '../../shared/db.js';
 
-export function createVerticalsRouter(db: DB): Router {
-  const router = Router();
-
+export function registerVerticalsRoutes(app: FastifyInstance, db: DB) {
   // GET /api/verticals — list with related data
-  router.get('/', async (_req, res) => {
-    try {
-      const allVerticals = await db.select().from(verticals);
-      const allAccounts = await db.select().from(accounts);
-      const allSources = await db.select().from(dataSources);
-      const allRules = await db.select().from(triggerRules);
-      const allTemplates = await db.select().from(contentTemplates);
+  app.get('/api/verticals', async () => {
+    const allVerticals = await db.select().from(verticals);
+    const allAccounts = await db.select().from(accounts);
+    const allSources = await db.select().from(dataSources);
+    const allRules = await db.select().from(triggerRules);
+    const allTemplates = await db.select().from(contentTemplates);
 
-      const result = allVerticals.map(v => ({
-        ...v,
-        accounts: allAccounts.filter(a => a.verticalId === v.id),
-        dataSources: allSources.filter(s => s.verticalId === v.id),
-        triggerRules: allRules.filter(r => r.verticalId === v.id),
-        contentTemplates: allTemplates.filter(t => t.verticalId === v.id),
-      }));
-
-      res.json(result);
-    } catch (err) {
-      res.status(500).json({ error: 'Failed to fetch verticals' });
-    }
+    return allVerticals.map(v => ({
+      ...v,
+      accounts: allAccounts.filter(a => a.verticalId === v.id),
+      dataSources: allSources.filter(s => s.verticalId === v.id),
+      triggerRules: allRules.filter(r => r.verticalId === v.id),
+      contentTemplates: allTemplates.filter(t => t.verticalId === v.id),
+    }));
   });
 
   // PATCH /api/verticals/:id/toggle
-  router.patch('/:id/toggle', async (req, res) => {
-    try {
-      const [v] = await db.select().from(verticals).where(eq(verticals.id, req.params.id));
-      if (!v) { res.status(404).json({ error: 'Not found' }); return; }
-      const newStatus = v.status === 'active' ? 'inactive' : 'active';
-      await db.update(verticals).set({ status: newStatus }).where(eq(verticals.id, v.id));
-      res.json({ status: newStatus });
-    } catch (err) {
-      res.status(500).json({ error: 'Failed to toggle' });
-    }
+  app.patch('/api/verticals/:id/toggle', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const [v] = await db.select().from(verticals).where(eq(verticals.id, id));
+    if (!v) return reply.status(404).send({ error: 'Not found' });
+
+    const newStatus = v.status === 'active' ? 'inactive' : 'active';
+    await db.update(verticals).set({ status: newStatus }).where(eq(verticals.id, v.id));
+    return { status: newStatus };
   });
 
-  // PATCH /api/trigger-rules/:id/toggle
-  router.patch('/trigger-rules/:id/toggle', async (req, res) => {
-    try {
-      const [rule] = await db.select().from(triggerRules).where(eq(triggerRules.id, req.params.id));
-      if (!rule) { res.status(404).json({ error: 'Not found' }); return; }
-      await db.update(triggerRules).set({ enabled: !rule.enabled }).where(eq(triggerRules.id, rule.id));
-      res.json({ enabled: !rule.enabled });
-    } catch (err) {
-      res.status(500).json({ error: 'Failed to toggle rule' });
-    }
-  });
+  // PATCH /api/verticals/trigger-rules/:id/toggle
+  app.patch('/api/verticals/trigger-rules/:id/toggle', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const [rule] = await db.select().from(triggerRules).where(eq(triggerRules.id, id));
+    if (!rule) return reply.status(404).send({ error: 'Not found' });
 
-  return router;
+    await db.update(triggerRules).set({ enabled: !rule.enabled }).where(eq(triggerRules.id, rule.id));
+    return { enabled: !rule.enabled };
+  });
 }
