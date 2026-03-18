@@ -1,5 +1,6 @@
 import type { DetectedEvent } from '../../domain/detected-event.js';
 import type { DataSourceProvider } from './types.js';
+import { logger } from '../../shared/logger.js';
 
 interface ExchangeRateConfig {
   endpoint: string;
@@ -21,14 +22,23 @@ export class ExchangeRateProvider implements DataSourceProvider {
 
   async poll(): Promise<DetectedEvent[]> {
     try {
-      const url = `${this.config.endpoint}?base=${this.config.base}&symbols=${this.config.symbols.join(',')}`;
-      const res = await fetch(url);
+      // Supports both open.er-api.com (/v6/latest/USD) and exchangerate.host (?base=USD&symbols=...)
+      const url = this.config.endpoint.includes('/v6/')
+        ? `${this.config.endpoint}/${this.config.base}`
+        : `${this.config.endpoint}?base=${this.config.base}&symbols=${this.config.symbols.join(',')}`;
 
-      if (!res.ok) return [];
+      const res = await fetch(url);
+      if (!res.ok) {
+        logger.warn({ status: res.status, url }, 'Exchange rate API error');
+        return [];
+      }
 
       const data = await res.json() as { rates?: Record<string, number> };
       const rates = data?.rates;
-      if (!rates || typeof rates !== 'object') return [];
+      if (!rates || typeof rates !== 'object') {
+        logger.warn({ data: JSON.stringify(data).slice(0, 200) }, 'Exchange rate API: no rates in response');
+        return [];
+      }
 
       const events: DetectedEvent[] = [];
       const now = new Date();
@@ -38,8 +48,8 @@ export class ExchangeRateProvider implements DataSourceProvider {
         if (typeof rate !== 'number') continue;
 
         const instrument = `${this.config.base}/${symbol}`;
-        const previousRate = this.previousRates.get(instrument) ?? rate;
-        const changePct = previousRate !== 0
+        const previousRate = this.previousRates.get(instrument);
+        const changePct = previousRate != null && previousRate !== 0
           ? ((rate - previousRate) / previousRate) * 100
           : 0;
 
@@ -49,7 +59,7 @@ export class ExchangeRateProvider implements DataSourceProvider {
           baseCurrency: this.config.base,
           quoteCurrency: symbol,
           price: rate,
-          previousPrice: previousRate,
+          previousPrice: previousRate ?? rate,
           changePct,
           observedAt: now,
           rawPayload: data as Record<string, unknown>,
@@ -59,7 +69,8 @@ export class ExchangeRateProvider implements DataSourceProvider {
       }
 
       return events;
-    } catch {
+    } catch (err) {
+      logger.error({ err }, 'Exchange rate poll failed');
       return [];
     }
   }

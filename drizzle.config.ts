@@ -5,6 +5,6 @@ export default defineConfig({
   schema: './src/shared/schema/index.ts',
   out: './drizzle',
   dbCredentials: {
-    url: process.env.DATABASE_URL!,
+    url: process.env.VIRAL_DATABASE_URL!,
   },
 });

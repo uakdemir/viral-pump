@@ -20,19 +20,19 @@ export class PostgresJobQueue implements JobQueue {
   }
 
   async dequeue(workerId: string, leaseDurationMs: number): Promise<Job | null> {
-    const now = new Date();
-    const leaseExpires = new Date(now.getTime() + leaseDurationMs);
+    const now = new Date().toISOString();
+    const leaseExpires = new Date(Date.now() + leaseDurationMs).toISOString();
 
     const rows = await this.db.execute(sql`
       UPDATE job_queue
       SET status = 'processing',
           locked_by = ${workerId},
-          locked_at = ${now},
-          started_at = ${now},
-          lease_expires_at = ${leaseExpires}
+          locked_at = ${now}::timestamptz,
+          started_at = ${now}::timestamptz,
+          lease_expires_at = ${leaseExpires}::timestamptz
       WHERE id = (
         SELECT id FROM job_queue
-        WHERE status = 'pending' AND scheduled_at <= ${now}
+        WHERE status = 'pending' AND scheduled_at <= ${now}::timestamptz
         ORDER BY scheduled_at
         FOR UPDATE SKIP LOCKED
         LIMIT 1

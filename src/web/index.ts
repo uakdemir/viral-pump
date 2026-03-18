@@ -12,7 +12,7 @@ import { registerPostsRoutes } from './api/posts.js';
 import { registerVerticalsRoutes } from './api/verticals.js';
 
 const logger = createChildLogger({ process: 'web' });
-const db = createDb(config.DATABASE_URL);
+const db = createDb(config.VIRAL_DATABASE_URL);
 const jobQueue = new PostgresJobQueue(db);
 
 const app = Fastify({ logger: false });

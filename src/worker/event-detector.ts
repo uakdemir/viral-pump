@@ -36,7 +36,16 @@ export class EventDetector {
           lastFiredAt: rule.lastFiredAt,
         }, event);
 
-        if (!shouldFire) continue;
+        if (!shouldFire) {
+          this.deps.logger.info({
+            rule: rule.name,
+            event: event.instrument,
+            changePct: Number(event.changePct.toFixed(4)),
+            threshold: condition.predicate.value,
+            cooldownExpired: !rule.lastFiredAt || (Date.now() - rule.lastFiredAt.getTime() >= rule.cooldownMs),
+          }, 'Rule evaluated — did not fire');
+          continue;
+        }
 
         this.deps.logger.info({ rule: rule.name, event: event.instrument }, 'Trigger rule fired');
 

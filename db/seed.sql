@@ -48,7 +48,7 @@ INSERT INTO data_sources (id, vertical_id, provider, config, poll_interval_ms, s
   '00000000-0000-0000-0000-000000000003',
   '00000000-0000-0000-0000-000000000001',
   'coingecko',
-  '{ "endpoint": "https://api.coingecko.com/api/v3/simple/price", "assets": { "gold": "XAU" }, "vsCurrencies": ["usd"] }'::jsonb,
+  '{ "endpoint": "https://api.coingecko.com/api/v3/simple/price", "assets": { "bitcoin": "BTC" }, "vsCurrencies": ["usd"] }'::jsonb,
   60000,
   'active'
 ),
@@ -56,7 +56,7 @@ INSERT INTO data_sources (id, vertical_id, provider, config, poll_interval_ms, s
   '00000000-0000-0000-0000-000000000004',
   '00000000-0000-0000-0000-000000000001',
   'exchangerate',
-  '{ "endpoint": "https://api.exchangerate.host/latest", "base": "USD", "symbols": ["TRY", "EUR"] }'::jsonb,
+  '{ "endpoint": "https://open.er-api.com/v6/latest", "base": "USD", "symbols": ["TRY", "EUR"] }'::jsonb,
   300000,
   'active'
 );
@@ -66,8 +66,8 @@ INSERT INTO trigger_rules (id, vertical_id, name, condition, fire_mode, cooldown
 (
   '00000000-0000-0000-0000-000000000005',
   '00000000-0000-0000-0000-000000000001',
-  'Gold moves >1% in 5 min',
-  '{ "match": { "source": "coingecko", "instrument": "XAU/USD" }, "predicate": { "field": "changePct", "operator": "gt", "value": 1.0 } }'::jsonb,
+  'BTC moves >1% in 5 min',
+  '{ "match": { "source": "coingecko", "instrument": "BTC/USD" }, "predicate": { "field": "changePct", "operator": "gt", "value": 1.0 } }'::jsonb,
   'threshold_cross',
   3600000,
   300000,

@@ -20,7 +20,7 @@ import { handlePostToPlatform } from './handlers/post-to-platform.js';
 import { JobReaper } from './job-reaper.js';
 
 const logger = createChildLogger({ process: 'worker', workerId: config.WORKER_ID });
-const db = createDb(config.DATABASE_URL);
+const db = createDb(config.VIRAL_DATABASE_URL);
 const jobQueue = new PostgresJobQueue(db);
 const assetStore = new LocalVolumeAssetStore(config.ASSET_DIR);
 const visualGenerator = new PuppeteerHtmlVisualGenerator();
@@ -104,7 +104,6 @@ async function processJobs(): Promise<void> {
             await handleGenerateVisual(job, { db, visualGenerator, assetStore, logger });
             break;
           case 'post-to-platform':
-            if (!appCredentials.apiKey) throw new Error('TWITTER_API_KEY not configured in env');
             await handlePostToPlatform(job, { db, postingStrategyRegistry, appCredentials, assetStore, logger });
             break;
           default:

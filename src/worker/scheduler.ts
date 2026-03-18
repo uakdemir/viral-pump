@@ -54,6 +54,17 @@ export class Scheduler {
 
         const events = await provider.poll();
 
+        this.deps.logger.info({
+          sourceId,
+          eventCount: events.length,
+          events: events.map(e => ({
+            instrument: e.instrument,
+            price: e.price,
+            previousPrice: e.previousPrice,
+            changePct: Number(e.changePct.toFixed(4)),
+          })),
+        }, 'Poll completed');
+
         if (events.length > 0) {
           await this.deps.onEvents(events, verticalId);
         }

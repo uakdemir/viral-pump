@@ -2,7 +2,7 @@ import { z } from 'zod';
 import 'dotenv/config';
 
 const envSchema = z.object({
-  DATABASE_URL: z.string().url(),
+  VIRAL_DATABASE_URL: z.string().url(),
   ANTHROPIC_API_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
   LLM_PROVIDER: z.enum(['claude', 'openai']).default('claude'),
