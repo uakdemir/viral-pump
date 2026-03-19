@@ -1,5 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { contentItems } from '../../shared/schema/content-items.js';
+import { GENERATION_STATUS, REVIEW_STATUS, JOB_TYPES, DEFAULT_LLM_MODEL } from '../../shared/constants.js';
 import { contentTemplates } from '../../shared/schema/content-templates.js';
 import { verticals } from '../../shared/schema/verticals.js';
 import { triggerRules } from '../../shared/schema/trigger-rules.js';
@@ -36,15 +37,15 @@ export async function handleGenerateContent(job: Job, deps: GenerateContentDeps)
   // Resolve content generator
   const genConfig = template.generationConfig as Record<string, unknown>;
   const providerName = (genConfig.provider as string) ?? defaults.contentGenerator?.provider ?? 'claude';
-  const model = (genConfig.model as string) ?? defaults.contentGenerator?.model ?? 'claude-haiku-4-5-20251001';
+  const model = (genConfig.model as string) ?? defaults.contentGenerator?.model ?? DEFAULT_LLM_MODEL;
 
   // Create content item in "generating" state
   const [item] = await deps.db.insert(contentItems).values({
     verticalId,
     templateId,
     eventData: eventData as any,
-    generationStatus: 'generating',
-    reviewStatus: 'draft',
+    generationStatus: GENERATION_STATUS.GENERATING,
+    reviewStatus: REVIEW_STATUS.DRAFT,
     aiConfig: { provider: providerName, model, templateName: template.name },
   }).returning({ id: contentItems.id });
 
@@ -91,7 +92,6 @@ export async function handleGenerateContent(job: Job, deps: GenerateContentDeps)
     }
 
     const result = await generator.generate({
-      event: eventData as any,
       promptTemplate: template.promptTemplate,
       generationConfig: genConfig,
       context,
@@ -120,14 +120,14 @@ export async function handleGenerateContent(job: Job, deps: GenerateContentDeps)
     if (visualConfig.skipVisual === true) {
       // No visual needed — transition directly to ready/pending
       await deps.db.update(contentItems)
-        .set({ generationStatus: 'ready', reviewStatus: 'pending' })
+        .set({ generationStatus: GENERATION_STATUS.READY, reviewStatus: REVIEW_STATUS.PENDING })
         .where(eq(contentItems.id, item.id));
       deps.logger.info({ contentItemId: item.id }, 'Skipped visual generation (skipVisual: true)');
     } else {
       // Enqueue visual generation
       // Add generatedText to context for visual template
       const visualContext = { ...context, generatedText: result.text };
-      await deps.jobQueue.enqueue('generate-visual', {
+      await deps.jobQueue.enqueue(JOB_TYPES.GENERATE_VISUAL, {
         contentItemId: item.id,
         templateConfig: visualConfig,
         context: visualContext,
@@ -135,7 +135,7 @@ export async function handleGenerateContent(job: Job, deps: GenerateContentDeps)
     }
   } catch (err) {
     await deps.db.update(contentItems)
-      .set({ generationStatus: 'failed' })
+      .set({ generationStatus: GENERATION_STATUS.FAILED })
       .where(eq(contentItems.id, item.id));
     throw err;
   }

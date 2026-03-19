@@ -18,6 +18,7 @@ import { handleGenerateContent } from './handlers/generate-content.js';
 import { handleGenerateVisual } from './handlers/generate-visual.js';
 import { handlePostToPlatform } from './handlers/post-to-platform.js';
 import { JobReaper } from './job-reaper.js';
+import { JOB_TYPES, DEFAULT_LLM_MODEL } from '../shared/constants.js';
 
 const logger = createChildLogger({ process: 'worker', workerId: config.WORKER_ID });
 const db = createDb(config.VIRAL_DATABASE_URL);
@@ -29,7 +30,7 @@ const visualGenerator = new PuppeteerHtmlVisualGenerator();
 const contentGeneratorRegistry = createRegistry<ContentGenerator>();
 if (config.ANTHROPIC_API_KEY) {
   contentGeneratorRegistry.register('claude', (cfg) =>
-    new ClaudeContentGenerator({ apiKey: config.ANTHROPIC_API_KEY!, model: cfg.model ?? config.LLM_MODEL })
+    new ClaudeContentGenerator({ apiKey: config.ANTHROPIC_API_KEY!, model: cfg.model ?? config.LLM_MODEL ?? DEFAULT_LLM_MODEL })
   );
 }
 if (config.OPENAI_API_KEY) {
@@ -77,9 +78,9 @@ const reaper = new JobReaper(db, logger);
 
 // Lease durations per job type (ms)
 const leaseDurations: Record<string, number> = {
-  'generate-content': 5 * 60 * 1000,
-  'generate-visual': 5 * 60 * 1000,
-  'post-to-platform': 2 * 60 * 1000,
+  [JOB_TYPES.GENERATE_CONTENT]: 5 * 60 * 1000,
+  [JOB_TYPES.GENERATE_VISUAL]: 5 * 60 * 1000,
+  [JOB_TYPES.POST_TO_PLATFORM]: 2 * 60 * 1000,
 };
 
 // Job processing loop
@@ -100,13 +101,13 @@ async function processJobs(): Promise<void> {
 
       try {
         switch (job.type) {
-          case 'generate-content':
+          case JOB_TYPES.GENERATE_CONTENT:
             await handleGenerateContent(job, { db, jobQueue, contentGeneratorRegistry, logger });
             break;
-          case 'generate-visual':
+          case JOB_TYPES.GENERATE_VISUAL:
             await handleGenerateVisual(job, { db, visualGenerator, assetStore, logger });
             break;
-          case 'post-to-platform':
+          case JOB_TYPES.POST_TO_PLATFORM:
             await handlePostToPlatform(job, { db, postingStrategyRegistry, appCredentials, assetStore, logger });
             break;
           default:

@@ -1,5 +1,6 @@
 import { eq, and, sql } from 'drizzle-orm';
 import { CronExpressionParser } from 'cron-parser';
+import { FIRE_MODES, JOB_TYPES, TEMPLATE_SELECTION } from '../shared/constants.js';
 import { dataSources } from '../shared/schema/data-sources.js';
 import { triggerRules } from '../shared/schema/trigger-rules.js';
 import { contentTemplates } from '../shared/schema/content-templates.js';
@@ -100,7 +101,7 @@ export class Scheduler {
     // Find all scheduled rules with NULL or past next_scheduled_at
     const rules = await this.deps.db.select().from(triggerRules)
       .where(and(
-        eq(triggerRules.fireMode, 'scheduled'),
+        eq(triggerRules.fireMode, FIRE_MODES.SCHEDULED),
         eq(triggerRules.enabled, true),
       ));
 
@@ -206,7 +207,7 @@ export class Scheduler {
 
       // Apply selection mode after full validation
       let matchedTemplates = resolvedTemplates;
-      if (contentConfig.templateSelection === 'random' && matchedTemplates.length > 0) {
+      if (contentConfig.templateSelection === TEMPLATE_SELECTION.RANDOM && matchedTemplates.length > 0) {
         matchedTemplates = [matchedTemplates[Math.floor(Math.random() * matchedTemplates.length)]];
       }
 
@@ -217,7 +218,7 @@ export class Scheduler {
         source: 'scheduler',
         type: 'scheduled',
         verticalId: rule.vertical_id,
-        observedAt: scheduledAt,
+        observedAt: new Date().toISOString(),
         data: {
           triggerType: 'scheduled',
           scheduledAt,
@@ -229,7 +230,7 @@ export class Scheduler {
       // Insert jobs — use (rule_id, scheduled_at, template_id) for dedup
       for (const template of matchedTemplates) {
         await tx.insert(jobQueueTable).values({
-          type: 'generate-content',
+          type: JOB_TYPES.GENERATE_CONTENT,
           payload: {
             verticalId: rule.vertical_id,
             templateId: template.id,

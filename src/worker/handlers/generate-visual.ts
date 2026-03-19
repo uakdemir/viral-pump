@@ -1,5 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { contentItems } from '../../shared/schema/content-items.js';
+import { GENERATION_STATUS, REVIEW_STATUS } from '../../shared/constants.js';
 import type { DB } from '../../shared/db.js';
 import type { Job } from '../../plugins/job-queue/types.js';
 import type { VisualGenerator } from '../../plugins/visual-generators/types.js';
@@ -31,15 +32,15 @@ export async function handleGenerateVisual(job: Job, deps: GenerateVisualDeps): 
     await deps.db.update(contentItems)
       .set({
         visualUrl,
-        generationStatus: 'ready',
-        reviewStatus: 'pending',
+        generationStatus: GENERATION_STATUS.READY,
+        reviewStatus: REVIEW_STATUS.PENDING,
       })
       .where(eq(contentItems.id, contentItemId));
 
     deps.logger.info({ contentItemId, visualUrl }, 'Visual generated, content ready for review');
   } catch (err) {
     await deps.db.update(contentItems)
-      .set({ generationStatus: 'failed' })
+      .set({ generationStatus: GENERATION_STATUS.FAILED })
       .where(eq(contentItems.id, contentItemId));
     throw err;
   }

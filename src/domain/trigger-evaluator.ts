@@ -1,4 +1,5 @@
 import type { DetectedEvent } from './detected-event.js';
+import { FIRE_MODES, TEMPLATE_SELECTION, type FireMode } from '../shared/constants.js';
 
 export interface RuleCondition {
   match: Record<string, string>;
@@ -13,7 +14,7 @@ export interface ContentConfig {
 
 export interface RuleInput {
   condition: RuleCondition;
-  fireMode: 'threshold_cross' | 'stateful_true' | 'every_poll' | 'scheduled';
+  fireMode: FireMode;
   cooldownMs: number;
   lastFiredAt: Date | null;
   lastPredicateResult?: boolean;  // previous evaluation result, for threshold_cross transition detection
@@ -57,7 +58,7 @@ function isCooldownExpired(lastFiredAt: Date | null, cooldownMs: number): boolea
   return Date.now() - lastFiredAt.getTime() >= cooldownMs;
 }
 
-function evaluatePredicates(predicates: RuleCondition['predicates'], logic: 'AND' | 'OR', eventData: Record<string, unknown>): boolean {
+export function evaluatePredicates(predicates: RuleCondition['predicates'], logic: 'AND' | 'OR', eventData: Record<string, unknown>): boolean {
   if (predicates.length === 0) return true;
   if (logic === 'OR') {
     return predicates.some(p => evaluatePredicate(p, eventData));
@@ -68,7 +69,7 @@ function evaluatePredicates(predicates: RuleCondition['predicates'], logic: 'AND
 export class DefaultTriggerEvaluator implements TriggerEvaluator {
   evaluate(rule: RuleInput, event: DetectedEvent): boolean {
     // Scheduled triggers are handled by the cron scheduler, not the event evaluator
-    if (rule.fireMode === 'scheduled') return false;
+    if (rule.fireMode === FIRE_MODES.SCHEDULED) return false;
 
     if (!matchesEvent(rule.condition.match, event)) return false;
     if (!isCooldownExpired(rule.lastFiredAt, rule.cooldownMs)) return false;
@@ -77,15 +78,15 @@ export class DefaultTriggerEvaluator implements TriggerEvaluator {
     const currentResult = evaluatePredicates(predicates, logic, event.data);
 
     switch (rule.fireMode) {
-      case 'every_poll':
+      case FIRE_MODES.EVERY_POLL:
         // Fire on every poll regardless of predicates
         return true;
 
-      case 'stateful_true':
+      case FIRE_MODES.STATEFUL_TRUE:
         // Fire every poll while predicates are currently true
         return currentResult;
 
-      case 'threshold_cross':
+      case FIRE_MODES.THRESHOLD_CROSS:
         // Fire only on transition: was false (or first evaluation), now true
         if (!currentResult) return false;
         if (rule.lastPredicateResult === true) return false; // still true, no transition
@@ -100,7 +101,7 @@ export class DefaultTriggerEvaluator implements TriggerEvaluator {
 export function validateContentConfig(config: unknown): config is ContentConfig {
   if (!config || typeof config !== 'object') return false;
   const c = config as any;
-  if (c.templateSelection !== 'named' && c.templateSelection !== 'random') return false;
+  if (c.templateSelection !== TEMPLATE_SELECTION.NAMED && c.templateSelection !== TEMPLATE_SELECTION.RANDOM) return false;
   if (!Array.isArray(c.templateNames) || c.templateNames.length === 0) return false;
   return c.templateNames.every((n: unknown) => typeof n === 'string');
 }
