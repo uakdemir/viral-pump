@@ -5,7 +5,12 @@ import type { VisualGenerator, VisualGeneratorInput } from './types.js';
 import { fillHtmlTemplate } from '../../shared/template-filler.js';
 import { logger } from '../../shared/logger.js';
 
-const TEMPLATES_DIR = path.resolve('templates/visuals');
+// Resolve relative to this source file, not CWD — avoids breakage when
+// the process is started from a different directory (e.g., Docker WORKDIR)
+const TEMPLATES_DIR = path.resolve(
+  path.dirname(new URL(import.meta.url).pathname),
+  '../../../templates/visuals',
+);
 
 export class PuppeteerHtmlVisualGenerator implements VisualGenerator {
   async generate(input: VisualGeneratorInput): Promise<Buffer> {

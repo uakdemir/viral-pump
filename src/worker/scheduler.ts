@@ -263,15 +263,14 @@ export class Scheduler {
   }
 
   private async advanceScheduleInTx(tx: any, ruleId: string, schedule: string): Promise<void> {
-    try {
-      const interval = CronExpressionParser.parse(schedule, { currentDate: new Date(), tz: 'UTC' });
-      const next = interval.next().toDate();
-      await tx.update(triggerRules)
-        .set({ nextScheduledAt: next })
-        .where(eq(triggerRules.id, ruleId));
-    } catch (err) {
-      this.deps.logger.error({ err, ruleId }, 'Failed to compute next schedule');
-    }
+    // Intentionally NOT catching errors here — if cron parse fails, the transaction
+    // must roll back to prevent infinite re-firing (no jobs created, schedule not advanced).
+    // Invalid cron expressions should be caught during initScheduledTriggers at startup.
+    const interval = CronExpressionParser.parse(schedule, { currentDate: new Date(), tz: 'UTC' });
+    const next = interval.next().toDate();
+    await tx.update(triggerRules)
+      .set({ nextScheduledAt: next })
+      .where(eq(triggerRules.id, ruleId));
   }
 
   stop(): void {

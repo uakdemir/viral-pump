@@ -10,7 +10,7 @@
     "dev:dashboard": "vite --config src/web/dashboard/vite.config.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:seed": "psql $DATABASE_URL -f db/seed.sql",
+    "db:seed": "psql $VIRAL_DATABASE_URL -f db/seed.sql",
     "test": "vitest",
     "test:run": "vitest run",
     "typecheck": "tsc --noEmit"

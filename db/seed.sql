@@ -36,11 +36,18 @@ INSERT INTO verticals (id, name, slug, depth, config, status) VALUES (
   'active'
 );
 
--- Accounts
-INSERT INTO accounts (id, vertical_id, platform, name, language, market, config, status) VALUES (
+-- Accounts (2 accounts for Gold/Forex — EN global + TR local)
+INSERT INTO accounts (id, vertical_id, platform, name, language, market, config, status) VALUES
+(
   '00000000-0000-0000-0000-000000000002',
   '00000000-0000-0000-0000-000000000001',
   'twitter', 'Gold Forex EN', 'en', 'global',
+  '{ "postingStrategy": "dry-run" }'::jsonb, 'active'
+),
+(
+  '00000000-0000-0000-0000-000000000009',
+  '00000000-0000-0000-0000-000000000001',
+  'twitter', 'Altın Döviz TR', 'tr', 'turkey',
   '{ "postingStrategy": "dry-run" }'::jsonb, 'active'
 );
 

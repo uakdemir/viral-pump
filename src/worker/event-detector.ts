@@ -142,21 +142,24 @@ export class EventDetector {
 
         this.deps.logger.info({ rule: rule.name, event: (event.data as any).instrument ?? event.type }, 'Trigger rule fired');
 
-        // Update last_fired_at AFTER template validation succeeds
+        // Atomic: update last_fired_at + enqueue jobs in one transaction
+        // If enqueue fails, cooldown is not consumed
         const firedAt = new Date();
-        await this.deps.db.update(triggerRules)
-          .set({ lastFiredAt: firedAt })
-          .where(eq(triggerRules.id, rule.id));
-        this.lastFiredState.set(rule.id, firedAt);
+        await this.deps.db.transaction(async (tx) => {
+          await tx.update(triggerRules)
+            .set({ lastFiredAt: firedAt })
+            .where(eq(triggerRules.id, rule.id));
 
-        for (const template of selectedTemplates) {
-          await this.deps.jobQueue.enqueue(JOB_TYPES.GENERATE_CONTENT, {
-            verticalId,
-            templateId: template.id,
-            eventData: event,
-            ruleId: rule.id,
-          });
-        }
+          for (const template of selectedTemplates) {
+            await this.deps.jobQueue.enqueue(JOB_TYPES.GENERATE_CONTENT, {
+              verticalId,
+              templateId: template.id,
+              eventData: event,
+              ruleId: rule.id,
+            });
+          }
+        });
+        this.lastFiredState.set(rule.id, firedAt);
       }
     }
   }

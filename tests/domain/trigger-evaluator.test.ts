@@ -89,6 +89,33 @@ describe('DefaultTriggerEvaluator', () => {
     }, goldEvent)).toBe(false);
   });
 
+  it('threshold_cross — does NOT re-fire while condition remains true', () => {
+    expect(evaluator.evaluate({
+      condition: { match: {}, predicates: [{ field: 'changePct', operator: 'gt', value: 1.0 }], logic: 'AND' },
+      fireMode: 'threshold_cross', cooldownMs: 0, lastFiredAt: null,
+      lastPredicateResult: true, // was already true — no transition
+      contentConfig: validConfig,
+    }, goldEvent)).toBe(false);
+  });
+
+  it('threshold_cross — fires on false→true transition', () => {
+    expect(evaluator.evaluate({
+      condition: { match: {}, predicates: [{ field: 'changePct', operator: 'gt', value: 1.0 }], logic: 'AND' },
+      fireMode: 'threshold_cross', cooldownMs: 0, lastFiredAt: null,
+      lastPredicateResult: false, // was false, now true — transition!
+      contentConfig: validConfig,
+    }, goldEvent)).toBe(true);
+  });
+
+  it('threshold_cross — fires on first evaluation (undefined→true)', () => {
+    expect(evaluator.evaluate({
+      condition: { match: {}, predicates: [{ field: 'changePct', operator: 'gt', value: 1.0 }], logic: 'AND' },
+      fireMode: 'threshold_cross', cooldownMs: 0, lastFiredAt: null,
+      lastPredicateResult: undefined, // first evaluation
+      contentConfig: validConfig,
+    }, goldEvent)).toBe(true);
+  });
+
   it('OR logic — fires if any predicate passes', () => {
     expect(evaluator.evaluate({
       condition: { match: {}, predicates: [
