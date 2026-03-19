@@ -5,7 +5,7 @@ import { verticals } from '../shared/schema/verticals.js';
 import type { DB } from '../shared/db.js';
 import type { DetectedEvent } from '../domain/detected-event.js';
 import type { JobQueue } from '../plugins/job-queue/types.js';
-import { DefaultTriggerEvaluator, validateContentConfig, type TriggerEvaluator, type RuleInput } from '../domain/trigger-evaluator.js';
+import { DefaultTriggerEvaluator, validateContentConfig, matchesEvent, type TriggerEvaluator, type RuleInput } from '../domain/trigger-evaluator.js';
 import { createRegistry, type PluginRegistry } from '../plugins/registry.js';
 
 export function createTriggerEvaluatorRegistry(): PluginRegistry<TriggerEvaluator> {
@@ -55,12 +55,31 @@ export class EventDetector {
           continue;
         }
 
+        const ruleCondition = {
+          match: condition.match ?? {},
+          predicates: condition.predicates ?? [],
+          logic: (condition.logic ?? 'AND') as 'AND' | 'OR',
+        };
+
+        // Only track predicate state for events that match this rule's match clause
+        const eventMatches = matchesEvent(ruleCondition.match, event);
+
+        if (eventMatches) {
+          // Compute current predicate result for threshold_cross tracking
+          const currentPredicateResult = ruleCondition.predicates.length === 0 ? true :
+            (ruleCondition.logic === 'OR'
+              ? ruleCondition.predicates.some((p: any) => this.evalPredicate(p, event.data))
+              : ruleCondition.predicates.every((p: any) => this.evalPredicate(p, event.data)));
+
+          // Persist to DB and update in-memory state for subsequent events in this batch
+          await this.deps.db.update(triggerRules)
+            .set({ lastPredicateResult: currentPredicateResult })
+            .where(eq(triggerRules.id, rule.id));
+          (rule as any).lastPredicateResult = currentPredicateResult;
+        }
+
         const ruleInput: RuleInput = {
-          condition: {
-            match: condition.match ?? {},
-            predicates: condition.predicates ?? [],
-            logic: condition.logic ?? 'AND',
-          },
+          condition: ruleCondition,
           fireMode: rule.fireMode as any,
           cooldownMs: rule.cooldownMs,
           lastFiredAt: rule.lastFiredAt,
@@ -69,17 +88,6 @@ export class EventDetector {
         };
 
         const shouldFire = evaluator.evaluate(ruleInput, event);
-
-        // Update lastPredicateResult for threshold_cross tracking
-        const predicates = condition.predicates ?? [];
-        const currentPredicateResult = predicates.length === 0 ? true :
-          (condition.logic === 'OR'
-            ? predicates.some((p: any) => typeof (event.data as any)[p.field] === 'number' && this.evalPredicate(p, event.data))
-            : predicates.every((p: any) => typeof (event.data as any)[p.field] === 'number' && this.evalPredicate(p, event.data)));
-
-        await this.deps.db.update(triggerRules)
-          .set({ lastPredicateResult: currentPredicateResult })
-          .where(eq(triggerRules.id, rule.id));
 
         if (!shouldFire) {
           this.deps.logger.info({
@@ -92,26 +100,32 @@ export class EventDetector {
           continue;
         }
 
-        // Resolve templates BEFORE updating last_fired_at
+        // Resolve and validate ALL configured templates BEFORE updating last_fired_at
         const allTemplates = await this.deps.db.select().from(contentTemplates)
           .where(and(
             eq(contentTemplates.verticalId, verticalId),
             eq(contentTemplates.enabled, true),
           ));
 
-        let selectedTemplates = allTemplates.filter(t =>
+        const resolvedTemplates = allTemplates.filter(t =>
           contentConfig.templateNames.includes(t.name)
         );
 
-        // Validate templates exist — don't consume cooldown if misconfigured
-        if (selectedTemplates.length === 0) {
+        // ALL configured names must resolve — partial matches are misconfiguration
+        const resolvedNames = new Set(resolvedTemplates.map(t => t.name));
+        const missingNames = contentConfig.templateNames.filter((n: string) => !resolvedNames.has(n));
+
+        if (missingNames.length > 0) {
           this.deps.logger.error({
             rule: rule.name,
-            templateNames: contentConfig.templateNames,
-          }, 'No matching enabled templates found — skipping without consuming cooldown');
+            missingNames,
+            configuredNames: contentConfig.templateNames,
+          }, 'Some configured template names not found or disabled — skipping without consuming cooldown');
           continue;
         }
 
+        // Apply selection mode after full validation
+        let selectedTemplates = resolvedTemplates;
         if (contentConfig.templateSelection === 'random' && selectedTemplates.length > 0) {
           selectedTemplates = [selectedTemplates[Math.floor(Math.random() * selectedTemplates.length)]];
         }

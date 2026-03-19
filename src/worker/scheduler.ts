@@ -184,28 +184,30 @@ export class Scheduler {
 
       // Resolve templates
       const templateNames: string[] = contentConfig.templateNames;
-      let selectedNames: string[];
       selectionMode = contentConfig.templateSelection;
 
-      if (contentConfig.templateSelection === 'random') {
-        selectedNames = [templateNames[Math.floor(Math.random() * templateNames.length)]];
-      } else {
-        selectedNames = templateNames;
-      }
-
+      // Resolve ALL configured templates first — validate before selecting
       const templates = await tx.select().from(contentTemplates)
         .where(and(
           eq(contentTemplates.verticalId, rule.vertical_id),
           eq(contentTemplates.enabled, true),
         ));
 
-      const matchedTemplates = templates.filter(t => selectedNames.includes(t.name));
+      const resolvedTemplates = templates.filter(t => templateNames.includes(t.name));
+      const resolvedNames = new Set(resolvedTemplates.map(t => t.name));
+      const missingNames = templateNames.filter((n: string) => !resolvedNames.has(n));
 
-      if (matchedTemplates.length === 0) {
-        this.deps.logger.error({ rule: rule.name, selectedNames }, 'No matching templates found — skipping');
+      if (missingNames.length > 0) {
+        this.deps.logger.error({ rule: rule.name, missingNames, templateNames }, 'Some configured template names not found or disabled — skipping');
         await this.advanceScheduleInTx(tx, rule.id, rule.schedule);
         fired = true;
         return;
+      }
+
+      // Apply selection mode after full validation
+      let matchedTemplates = resolvedTemplates;
+      if (contentConfig.templateSelection === 'random' && matchedTemplates.length > 0) {
+        matchedTemplates = [matchedTemplates[Math.floor(Math.random() * matchedTemplates.length)]];
       }
 
       templateNamesList = matchedTemplates.map(t => t.name);

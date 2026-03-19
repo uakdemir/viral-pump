@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { ContentGenerator, ContentGeneratorInput, ContentGeneratorOutput } from './types.js';
 import { fillPromptTemplate } from '../../shared/template-filler.js';
+import { parseLlmResponse } from '../../shared/parse-llm-response.js';
 import { logger } from '../../shared/logger.js';
 
 interface ClaudeConfig {
@@ -34,7 +35,7 @@ export class ClaudeContentGenerator implements ContentGenerator {
       .map((b) => b.text)
       .join('');
 
-    const { text, tags } = parseResponse(rawText);
+    const { text, tags } = parseLlmResponse(rawText);
 
     return {
       text,
@@ -46,31 +47,3 @@ export class ClaudeContentGenerator implements ContentGenerator {
   }
 }
 
-function parseResponse(raw: string): { text: string; tags: string[] } {
-  // Split on "Tags:" (case-insensitive)
-  const tagsMatch = raw.match(/tags:\s*(.*)/i);
-
-  let text: string;
-  let tags: string[] = [];
-
-  if (tagsMatch) {
-    // Everything before "Tags:" is the tweet text
-    const tagsIndex = raw.toLowerCase().lastIndexOf('tags:');
-    text = raw.substring(0, tagsIndex).trim();
-
-    // Parse comma-separated tags
-    tags = tagsMatch[1]
-      .split(',')
-      .map(t => t.trim().toLowerCase())
-      .filter(t => t.length > 0);
-  } else {
-    text = raw.trim();
-  }
-
-  // Strip "Tweet:" prefix if present
-  if (text.toLowerCase().startsWith('tweet:')) {
-    text = text.substring(6).trim();
-  }
-
-  return { text, tags };
-}

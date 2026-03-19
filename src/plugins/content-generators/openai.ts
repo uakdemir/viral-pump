@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import type { ContentGenerator, ContentGeneratorInput, ContentGeneratorOutput } from './types.js';
 import { fillPromptTemplate } from '../../shared/template-filler.js';
+import { parseLlmResponse } from '../../shared/parse-llm-response.js';
 
 interface OpenAIConfig {
   apiKey: string;
@@ -29,7 +30,7 @@ export class OpenAIContentGenerator implements ContentGenerator {
     });
 
     const rawText = response.choices[0]?.message?.content ?? '';
-    const { text, tags } = parseResponse(rawText);
+    const { text, tags } = parseLlmResponse(rawText);
 
     return {
       text,
@@ -41,26 +42,3 @@ export class OpenAIContentGenerator implements ContentGenerator {
   }
 }
 
-function parseResponse(raw: string): { text: string; tags: string[] } {
-  const tagsMatch = raw.match(/tags:\s*(.*)/i);
-
-  let text: string;
-  let tags: string[] = [];
-
-  if (tagsMatch) {
-    const tagsIndex = raw.toLowerCase().lastIndexOf('tags:');
-    text = raw.substring(0, tagsIndex).trim();
-    tags = tagsMatch[1]
-      .split(',')
-      .map(t => t.trim().toLowerCase())
-      .filter(t => t.length > 0);
-  } else {
-    text = raw.trim();
-  }
-
-  if (text.toLowerCase().startsWith('tweet:')) {
-    text = text.substring(6).trim();
-  }
-
-  return { text, tags };
-}
