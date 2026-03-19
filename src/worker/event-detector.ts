@@ -92,13 +92,15 @@ export class EventDetector {
 
         const shouldFire = evaluator.evaluate(ruleInput, event);
 
-        // Update predicate state AFTER evaluation — only for matching events
+        // Update predicate state AFTER evaluation — only for matching events, only when changed
         if (matchesEvent(ruleCondition.match, event)) {
           const currentResult = evaluatePredicates(ruleCondition.predicates, ruleCondition.logic, event.data);
-          this.predicateState.set(rule.id, currentResult);
-          await this.deps.db.update(triggerRules)
-            .set({ lastPredicateResult: currentResult })
-            .where(eq(triggerRules.id, rule.id));
+          if (this.predicateState.get(rule.id) !== currentResult) {
+            this.predicateState.set(rule.id, currentResult);
+            await this.deps.db.update(triggerRules)
+              .set({ lastPredicateResult: currentResult })
+              .where(eq(triggerRules.id, rule.id));
+          }
         }
 
         if (!shouldFire) {

@@ -56,9 +56,11 @@ export class Scheduler {
     await this.initScheduledTriggers();
 
     // Start cron check loop
-    this.cronTimer = setInterval(() => this.checkScheduledTriggers(), 60000);
+    this.cronTimer = setInterval(() => {
+      this.checkScheduledTriggers().catch(err => this.deps.logger.error({ err }, 'Scheduled trigger check failed'));
+    }, 60000);
     // Also check immediately
-    this.checkScheduledTriggers();
+    this.checkScheduledTriggers().catch(err => this.deps.logger.error({ err }, 'Initial scheduled trigger check failed'));
   }
 
   private pollSource(sourceId: string, verticalId: string, intervalMs: number): void {
