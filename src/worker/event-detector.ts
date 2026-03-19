@@ -2,7 +2,7 @@ import { eq, and } from 'drizzle-orm';
 import { triggerRules } from '../shared/schema/trigger-rules.js';
 import { contentTemplates } from '../shared/schema/content-templates.js';
 import { verticals } from '../shared/schema/verticals.js';
-import { FIRE_MODES, TEMPLATE_SELECTION } from '../shared/constants.js';
+import { FIRE_MODES, TEMPLATE_SELECTION, JOB_TYPES } from '../shared/constants.js';
 import type { DB } from '../shared/db.js';
 import type { DetectedEvent } from '../domain/detected-event.js';
 import type { JobQueue } from '../plugins/job-queue/types.js';
@@ -31,8 +31,10 @@ interface EventDetectorDeps {
 
 export class EventDetector {
   private deps: EventDetectorDeps;
-  // In-memory predicate state per rule — avoids type-unsafe mutation of Drizzle result objects
+  // In-memory state per rule — avoids type-unsafe mutation of Drizzle result objects
+  // These maps persist across processEvents calls (correct for threshold_cross tracking)
   private predicateState = new Map<string, boolean>();
+  private lastFiredState = new Map<string, Date>();
 
   constructor(deps: EventDetectorDeps) {
     this.deps = deps;
@@ -50,10 +52,13 @@ export class EventDetector {
         eq(triggerRules.enabled, true),
       ));
 
-    // Initialize in-memory state from DB values
+    // Initialize in-memory state from DB values (only if not already tracked)
     for (const rule of rules) {
-      if (rule.lastPredicateResult != null) {
+      if (rule.lastPredicateResult != null && !this.predicateState.has(rule.id)) {
         this.predicateState.set(rule.id, rule.lastPredicateResult);
+      }
+      if (rule.lastFiredAt && !this.lastFiredState.has(rule.id)) {
+        this.lastFiredState.set(rule.id, rule.lastFiredAt);
       }
     }
 
@@ -80,7 +85,7 @@ export class EventDetector {
           condition: ruleCondition,
           fireMode: rule.fireMode as any,
           cooldownMs: rule.cooldownMs,
-          lastFiredAt: rule.lastFiredAt,
+          lastFiredAt: this.lastFiredState.get(rule.id) ?? rule.lastFiredAt,
           lastPredicateResult: this.predicateState.get(rule.id),
           contentConfig,
         };
@@ -138,11 +143,11 @@ export class EventDetector {
         this.deps.logger.info({ rule: rule.name, event: (event.data as any).instrument ?? event.type }, 'Trigger rule fired');
 
         // Update last_fired_at AFTER template validation succeeds
+        const firedAt = new Date();
         await this.deps.db.update(triggerRules)
-          .set({ lastFiredAt: new Date() })
+          .set({ lastFiredAt: firedAt })
           .where(eq(triggerRules.id, rule.id));
-        // Also update in-memory for subsequent events in batch
-        (rule as any).lastFiredAt = new Date();
+        this.lastFiredState.set(rule.id, firedAt);
 
         for (const template of selectedTemplates) {
           await this.deps.jobQueue.enqueue(JOB_TYPES.GENERATE_CONTENT, {
@@ -156,6 +161,3 @@ export class EventDetector {
     }
   }
 }
-
-// Re-export for use in worker/index.ts
-import { JOB_TYPES } from '../shared/constants.js';

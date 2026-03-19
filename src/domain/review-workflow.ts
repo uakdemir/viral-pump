@@ -2,24 +2,20 @@ import { eq, and } from 'drizzle-orm';
 import { contentItems } from '../shared/schema/content-items.js';
 import { posts } from '../shared/schema/posts.js';
 import { accounts } from '../shared/schema/accounts.js';
+import { REVIEW_STATUS, POST_STATUS, JOB_TYPES } from '../shared/constants.js';
 import type { DB } from '../shared/db.js';
 import type { JobQueue } from '../plugins/job-queue/types.js';
 
-export async function approveContent(db: DB, jobQueue: JobQueue, contentItemId: string): Promise<boolean> {
-  const result = await db.update(contentItems)
-    .set({ reviewStatus: 'approved', reviewedAt: new Date() })
-    .where(and(
-      eq(contentItems.id, contentItemId),
-      eq(contentItems.reviewStatus, 'pending'),
-    ))
-    .returning({ id: contentItems.id, verticalId: contentItems.verticalId });
-
-  if (result.length === 0) return false;
-
+/**
+ * Shared: create post rows for all active accounts in the vertical and enqueue posting jobs.
+ */
+async function createPostsForContent(
+  db: DB, jobQueue: JobQueue, contentItemId: string, verticalId: string,
+): Promise<void> {
   const activeAccounts = await db.select()
     .from(accounts)
     .where(and(
-      eq(accounts.verticalId, result[0].verticalId),
+      eq(accounts.verticalId, verticalId),
       eq(accounts.status, 'active'),
     ));
 
@@ -30,14 +26,27 @@ export async function approveContent(db: DB, jobQueue: JobQueue, contentItemId: 
       .returning({ id: posts.id });
 
     if (inserted.length > 0) {
-      await jobQueue.enqueue('post-to-platform', {
+      await jobQueue.enqueue(JOB_TYPES.POST_TO_PLATFORM, {
         postId: inserted[0].id,
         contentItemId,
         accountId: account.id,
       });
     }
   }
+}
 
+export async function approveContent(db: DB, jobQueue: JobQueue, contentItemId: string): Promise<boolean> {
+  const result = await db.update(contentItems)
+    .set({ reviewStatus: REVIEW_STATUS.APPROVED, reviewedAt: new Date() })
+    .where(and(
+      eq(contentItems.id, contentItemId),
+      eq(contentItems.reviewStatus, REVIEW_STATUS.PENDING),
+    ))
+    .returning({ id: contentItems.id, verticalId: contentItems.verticalId });
+
+  if (result.length === 0) return false;
+
+  await createPostsForContent(db, jobQueue, contentItemId, result[0].verticalId);
   return true;
 }
 
@@ -48,39 +57,18 @@ export async function editAndApprove(
     .set({
       finalText,
       editedAt: new Date(),
-      reviewStatus: 'approved',
+      reviewStatus: REVIEW_STATUS.APPROVED,
       reviewedAt: new Date(),
     })
     .where(and(
       eq(contentItems.id, contentItemId),
-      eq(contentItems.reviewStatus, 'pending'),
+      eq(contentItems.reviewStatus, REVIEW_STATUS.PENDING),
     ))
     .returning({ id: contentItems.id, verticalId: contentItems.verticalId });
 
   if (result.length === 0) return false;
 
-  const activeAccounts = await db.select()
-    .from(accounts)
-    .where(and(
-      eq(accounts.verticalId, result[0].verticalId),
-      eq(accounts.status, 'active'),
-    ));
-
-  for (const account of activeAccounts) {
-    const inserted = await db.insert(posts)
-      .values({ contentId: contentItemId, accountId: account.id })
-      .onConflictDoNothing()
-      .returning({ id: posts.id });
-
-    if (inserted.length > 0) {
-      await jobQueue.enqueue('post-to-platform', {
-        postId: inserted[0].id,
-        contentItemId,
-        accountId: account.id,
-      });
-    }
-  }
-
+  await createPostsForContent(db, jobQueue, contentItemId, result[0].verticalId);
   return true;
 }
 
@@ -89,13 +77,13 @@ export async function rejectContent(
 ): Promise<boolean> {
   const result = await db.update(contentItems)
     .set({
-      reviewStatus: 'rejected',
+      reviewStatus: REVIEW_STATUS.REJECTED,
       reviewNotes: notes ?? null,
       reviewedAt: new Date(),
     })
     .where(and(
       eq(contentItems.id, contentItemId),
-      eq(contentItems.reviewStatus, 'pending'),
+      eq(contentItems.reviewStatus, REVIEW_STATUS.PENDING),
     ))
     .returning({ id: contentItems.id });
 

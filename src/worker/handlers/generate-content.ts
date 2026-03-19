@@ -68,22 +68,29 @@ export async function handleGenerateContent(job: Job, deps: GenerateContentDeps)
     const isScheduled = eventData.type === 'scheduled';
     const eventDataFields = (eventData.data ?? {}) as Record<string, unknown>;
 
+    // Common context fields shared by both scheduled and event-driven triggers
+    const commonContext = {
+      ruleName,
+      date: new Date().toLocaleDateString(),
+      category: template.category,       // from content_templates — used by visual templates like tip-card
+      contentLayer: template.contentLayer,
+      templateName: template.name,
+    };
+
     let context: Record<string, unknown>;
     if (isScheduled) {
       context = {
-        ruleName,
+        ...commonContext,
         scheduledAt: eventDataFields.scheduledAt ?? '',
-        date: new Date().toLocaleDateString(),
       };
     } else {
       const changePct = (eventDataFields.changePct as number) ?? 0;
       context = {
         ...eventDataFields,
+        ...commonContext,
         source: eventData.source,
         type: eventData.type,
         lookbackMinutes,
-        ruleName,
-        date: new Date().toLocaleDateString(),
         direction: changePct >= 0 ? 'up' : 'down',
         directionArrow: changePct >= 0 ? '\u25B2' : '\u25BC',
         directionClass: changePct >= 0 ? 'up' : 'down',

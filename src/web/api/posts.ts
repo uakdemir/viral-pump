@@ -3,6 +3,7 @@ import { eq, desc } from 'drizzle-orm';
 import { posts } from '../../shared/schema/posts.js';
 import { contentItems } from '../../shared/schema/content-items.js';
 import { accounts } from '../../shared/schema/accounts.js';
+import { POST_STATUS, JOB_TYPES } from '../../shared/constants.js';
 import type { DB } from '../../shared/db.js';
 import type { JobQueue } from '../../plugins/job-queue/types.js';
 
@@ -48,12 +49,12 @@ export function registerPostsRoutes(app: FastifyInstance, db: DB, jobQueue: JobQ
     if (!post) {
       return reply.status(404).send({ error: 'Post not found' });
     }
-    if (post.status !== 'failed') {
+    if (post.status !== POST_STATUS.FAILED) {
       return reply.status(409).send({ error: 'Only failed posts can be retried' });
     }
 
-    await db.update(posts).set({ status: 'ready' }).where(eq(posts.id, id));
-    await jobQueue.enqueue('post-to-platform', {
+    await db.update(posts).set({ status: POST_STATUS.READY }).where(eq(posts.id, id));
+    await jobQueue.enqueue(JOB_TYPES.POST_TO_PLATFORM, {
       postId: id,
       contentItemId: post.contentId,
       accountId: post.accountId,

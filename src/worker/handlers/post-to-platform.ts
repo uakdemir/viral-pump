@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm';
 import { posts } from '../../shared/schema/posts.js';
 import { contentItems } from '../../shared/schema/content-items.js';
 import { accounts } from '../../shared/schema/accounts.js';
+import { POST_STATUS } from '../../shared/constants.js';
 import type { DB } from '../../shared/db.js';
 import type { Job } from '../../plugins/job-queue/types.js';
 import type { PostingStrategy } from '../../plugins/posting-strategies/types.js';
@@ -36,7 +37,7 @@ export async function handlePostToPlatform(job: Job, deps: PostToPlatformDeps): 
   // App-level keys (API key/secret) come from env, per-account tokens come from DB
   const accountCreds = account.credentials as Record<string, string>;
   const accountConfig = account.config as Record<string, string>;
-  const strategyName = accountConfig.postingStrategy ?? 'twitter-api';
+  const strategyName = accountConfig.postingStrategy ?? 'twitter-api'; // fallback kept as string — strategy names are user-configured, not in constants
 
   const postingStrategy = deps.postingStrategyRegistry.resolve(strategyName, {
     apiKey: deps.appCredentials.apiKey,
@@ -59,7 +60,7 @@ export async function handlePostToPlatform(job: Job, deps: PostToPlatformDeps): 
 
     await deps.db.update(posts)
       .set({
-        status: 'posted',
+        status: POST_STATUS.POSTED,
         postedAt: result.postedAt,
         platformPostId: result.platformPostId,
       })
@@ -72,7 +73,7 @@ export async function handlePostToPlatform(job: Job, deps: PostToPlatformDeps): 
     }, 'Posted to platform');
   } catch (err) {
     await deps.db.update(posts)
-      .set({ status: 'failed' })
+      .set({ status: POST_STATUS.FAILED })
       .where(eq(posts.id, postId));
     throw err;
   }
