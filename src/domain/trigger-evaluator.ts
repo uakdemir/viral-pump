@@ -16,6 +16,7 @@ export interface RuleInput {
   fireMode: 'threshold_cross' | 'stateful_true' | 'every_poll' | 'scheduled';
   cooldownMs: number;
   lastFiredAt: Date | null;
+  lastPredicateResult?: boolean;  // previous evaluation result, for threshold_cross transition detection
   contentConfig: ContentConfig;
 }
 
@@ -56,6 +57,14 @@ function isCooldownExpired(lastFiredAt: Date | null, cooldownMs: number): boolea
   return Date.now() - lastFiredAt.getTime() >= cooldownMs;
 }
 
+function evaluatePredicates(predicates: RuleCondition['predicates'], logic: 'AND' | 'OR', eventData: Record<string, unknown>): boolean {
+  if (predicates.length === 0) return true;
+  if (logic === 'OR') {
+    return predicates.some(p => evaluatePredicate(p, eventData));
+  }
+  return predicates.every(p => evaluatePredicate(p, eventData));
+}
+
 export class DefaultTriggerEvaluator implements TriggerEvaluator {
   evaluate(rule: RuleInput, event: DetectedEvent): boolean {
     // Scheduled triggers are handled by the cron scheduler, not the event evaluator
@@ -65,13 +74,26 @@ export class DefaultTriggerEvaluator implements TriggerEvaluator {
     if (!isCooldownExpired(rule.lastFiredAt, rule.cooldownMs)) return false;
 
     const { predicates, logic } = rule.condition;
-    if (predicates.length === 0) return true;
+    const currentResult = evaluatePredicates(predicates, logic, event.data);
 
-    if (logic === 'OR') {
-      return predicates.some(p => evaluatePredicate(p, event.data));
+    switch (rule.fireMode) {
+      case 'every_poll':
+        // Fire on every poll regardless of predicates
+        return true;
+
+      case 'stateful_true':
+        // Fire every poll while predicates are currently true
+        return currentResult;
+
+      case 'threshold_cross':
+        // Fire only on transition: was false (or first evaluation), now true
+        if (!currentResult) return false;
+        if (rule.lastPredicateResult === true) return false; // still true, no transition
+        return true; // was false/undefined, now true — transition!
+
+      default:
+        return currentResult;
     }
-    // Default: AND
-    return predicates.every(p => evaluatePredicate(p, event.data));
   }
 }
 

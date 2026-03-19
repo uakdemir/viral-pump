@@ -10,7 +10,10 @@ const TEMPLATES_DIR = path.resolve('templates/visuals');
 export class PuppeteerHtmlVisualGenerator implements VisualGenerator {
   async generate(input: VisualGeneratorInput): Promise<Buffer> {
     const { templateConfig, context } = input;
-    const templateName = (templateConfig?.template as string) ?? 'tip-card';
+    const templateName = templateConfig?.template as string;
+    if (!templateName) {
+      throw new Error('visualTemplate.template is required but missing or empty. Set skipVisual: true to skip visual generation, or provide a template name.');
+    }
     const width = (templateConfig?.config as any)?.width ?? 1200;
     const height = (templateConfig?.config as any)?.height ?? 628;
 

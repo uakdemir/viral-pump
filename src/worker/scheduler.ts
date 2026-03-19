@@ -138,116 +138,132 @@ export class Scheduler {
 
   private async claimAndFireScheduledRule(): Promise<boolean> {
     const now = new Date().toISOString();
+    let fired = false;
+    let ruleName = '';
+    let templateNamesList: string[] = [];
+    let selectionMode = '';
 
-    // Single transaction: claim rule + insert jobs
-    const claimedRows = await this.deps.db.execute(sql`
-      SELECT id, name, vertical_id, schedule, content_config, cooldown_ms, last_fired_at
-      FROM trigger_rules
-      WHERE fire_mode = 'scheduled'
-        AND enabled = true
-        AND next_scheduled_at <= ${now}::timestamptz
-      ORDER BY next_scheduled_at
-      FOR UPDATE SKIP LOCKED
-      LIMIT 1
-    `);
+    // Entire claim + job insert + advance in one transaction
+    await this.deps.db.transaction(async (tx) => {
+      // Claim a due rule with row lock
+      const claimedRows = await tx.execute(sql`
+        SELECT id, name, vertical_id, schedule, content_config, cooldown_ms, last_fired_at, next_scheduled_at
+        FROM trigger_rules
+        WHERE fire_mode = 'scheduled'
+          AND enabled = true
+          AND next_scheduled_at <= ${now}::timestamptz
+        ORDER BY next_scheduled_at
+        FOR UPDATE SKIP LOCKED
+        LIMIT 1
+      `);
 
-    if (!claimedRows.length) return false;
+      if (!claimedRows.length) return; // no due rules
 
-    const rule = claimedRows[0] as any;
+      const rule = claimedRows[0] as any;
+      ruleName = rule.name;
+      const scheduledAt = rule.next_scheduled_at;
 
-    // Validate content_config
-    const contentConfig = rule.content_config;
-    if (!validateContentConfig(contentConfig)) {
-      this.deps.logger.error({ rule: rule.name, contentConfig }, 'Misconfigured content_config — skipping');
-      // Advance schedule anyway to prevent infinite loop
-      await this.advanceSchedule(rule.id, rule.schedule);
-      return true;
-    }
-
-    // Check cooldown
-    if (rule.last_fired_at) {
-      const elapsed = Date.now() - new Date(rule.last_fired_at).getTime();
-      if (elapsed < rule.cooldown_ms) {
-        await this.advanceSchedule(rule.id, rule.schedule);
-        return true;
+      // Validate content_config
+      const contentConfig = rule.content_config;
+      if (!validateContentConfig(contentConfig)) {
+        this.deps.logger.error({ rule: rule.name, contentConfig }, 'Misconfigured content_config — skipping');
+        await this.advanceScheduleInTx(tx, rule.id, rule.schedule);
+        fired = true;
+        return;
       }
-    }
 
-    // Resolve templates
-    const templateNames: string[] = contentConfig.templateNames;
-    let selectedNames: string[];
+      // Check cooldown
+      if (rule.last_fired_at) {
+        const elapsed = Date.now() - new Date(rule.last_fired_at).getTime();
+        if (elapsed < rule.cooldown_ms) {
+          await this.advanceScheduleInTx(tx, rule.id, rule.schedule);
+          fired = true;
+          return;
+        }
+      }
 
-    if (contentConfig.templateSelection === 'random') {
-      selectedNames = [templateNames[Math.floor(Math.random() * templateNames.length)]];
-    } else {
-      selectedNames = templateNames;
-    }
+      // Resolve templates
+      const templateNames: string[] = contentConfig.templateNames;
+      let selectedNames: string[];
+      selectionMode = contentConfig.templateSelection;
 
-    // Find template IDs
-    const templates = await this.deps.db.select().from(contentTemplates)
-      .where(and(
-        eq(contentTemplates.verticalId, rule.vertical_id),
-        eq(contentTemplates.enabled, true),
-      ));
+      if (contentConfig.templateSelection === 'random') {
+        selectedNames = [templateNames[Math.floor(Math.random() * templateNames.length)]];
+      } else {
+        selectedNames = templateNames;
+      }
 
-    const matchedTemplates = templates.filter(t => selectedNames.includes(t.name));
+      const templates = await tx.select().from(contentTemplates)
+        .where(and(
+          eq(contentTemplates.verticalId, rule.vertical_id),
+          eq(contentTemplates.enabled, true),
+        ));
 
-    if (matchedTemplates.length === 0) {
-      this.deps.logger.error({ rule: rule.name, selectedNames }, 'No matching templates found — skipping');
-      await this.advanceSchedule(rule.id, rule.schedule);
-      return true;
-    }
+      const matchedTemplates = templates.filter(t => selectedNames.includes(t.name));
 
-    // Create synthetic event
-    const scheduledAt = new Date().toISOString();
-    const syntheticEvent = {
-      source: 'scheduler',
-      type: 'scheduled',
-      verticalId: rule.vertical_id,
-      observedAt: scheduledAt,
-      data: {
-        triggerType: 'scheduled',
-        scheduledAt,
-        ruleName: rule.name,
-      },
-      rawPayload: {},
-    };
+      if (matchedTemplates.length === 0) {
+        this.deps.logger.error({ rule: rule.name, selectedNames }, 'No matching templates found — skipping');
+        await this.advanceScheduleInTx(tx, rule.id, rule.schedule);
+        fired = true;
+        return;
+      }
 
-    // Insert jobs for each selected template
-    for (const template of matchedTemplates) {
-      await this.deps.db.insert(jobQueueTable).values({
-        type: 'generate-content',
-        payload: {
-          verticalId: rule.vertical_id,
-          templateId: template.id,
-          eventData: syntheticEvent,
-          ruleId: rule.id,
-          triggeredBy: 'scheduled',
+      templateNamesList = matchedTemplates.map(t => t.name);
+
+      // Create synthetic event
+      const syntheticEvent = {
+        source: 'scheduler',
+        type: 'scheduled',
+        verticalId: rule.vertical_id,
+        observedAt: scheduledAt,
+        data: {
+          triggerType: 'scheduled',
           scheduledAt,
+          ruleName: rule.name,
         },
-      });
+        rawPayload: {},
+      };
+
+      // Insert jobs — use (rule_id, scheduled_at, template_id) for dedup
+      for (const template of matchedTemplates) {
+        await tx.insert(jobQueueTable).values({
+          type: 'generate-content',
+          payload: {
+            verticalId: rule.vertical_id,
+            templateId: template.id,
+            eventData: syntheticEvent,
+            ruleId: rule.id,
+            triggeredBy: 'scheduled',
+            scheduledAt,
+          },
+        });
+      }
+
+      // Advance schedule and update last_fired_at — all within same transaction
+      await this.advanceScheduleInTx(tx, rule.id, rule.schedule);
+      await tx.update(triggerRules)
+        .set({ lastFiredAt: new Date() })
+        .where(eq(triggerRules.id, rule.id));
+
+      fired = true;
+    });
+
+    if (fired && templateNamesList.length > 0) {
+      this.deps.logger.info({
+        rule: ruleName,
+        templates: templateNamesList,
+        selection: selectionMode,
+      }, 'Scheduled trigger fired');
     }
 
-    // Advance schedule and update last_fired_at
-    await this.advanceSchedule(rule.id, rule.schedule);
-    await this.deps.db.update(triggerRules)
-      .set({ lastFiredAt: new Date() })
-      .where(eq(triggerRules.id, rule.id));
-
-    this.deps.logger.info({
-      rule: rule.name,
-      templates: matchedTemplates.map(t => t.name),
-      selection: contentConfig.templateSelection,
-    }, 'Scheduled trigger fired');
-
-    return true;
+    return fired;
   }
 
-  private async advanceSchedule(ruleId: string, schedule: string): Promise<void> {
+  private async advanceScheduleInTx(tx: any, ruleId: string, schedule: string): Promise<void> {
     try {
       const interval = CronExpressionParser.parse(schedule, { currentDate: new Date(), tz: 'UTC' });
       const next = interval.next().toDate();
-      await this.deps.db.update(triggerRules)
+      await tx.update(triggerRules)
         .set({ nextScheduledAt: next })
         .where(eq(triggerRules.id, ruleId));
     } catch (err) {

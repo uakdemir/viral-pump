@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm';
 import { contentItems } from '../../shared/schema/content-items.js';
 import { contentTemplates } from '../../shared/schema/content-templates.js';
 import { verticals } from '../../shared/schema/verticals.js';
+import { triggerRules } from '../../shared/schema/trigger-rules.js';
 import type { DB } from '../../shared/db.js';
 import type { Job, JobQueue } from '../../plugins/job-queue/types.js';
 import type { ContentGenerator } from '../../plugins/content-generators/types.js';
@@ -15,10 +16,11 @@ interface GenerateContentDeps {
 }
 
 export async function handleGenerateContent(job: Job, deps: GenerateContentDeps): Promise<void> {
-  const { verticalId, templateId, eventData } = job.payload as {
+  const { verticalId, templateId, eventData, ruleId } = job.payload as {
     verticalId: string;
     templateId: string;
     eventData: { source: string; type: string; data: Record<string, unknown>; [key: string]: unknown };
+    ruleId?: string;
   };
 
   // Get template
@@ -49,6 +51,18 @@ export async function handleGenerateContent(job: Job, deps: GenerateContentDeps)
   try {
     const generator = deps.contentGeneratorRegistry.resolve(providerName, { model });
 
+    // Load trigger rule metadata for context
+    let ruleName = '';
+    let lookbackMinutes = 5;
+    if (ruleId) {
+      const [rule] = await deps.db.select().from(triggerRules)
+        .where(eq(triggerRules.id, ruleId));
+      if (rule) {
+        ruleName = rule.name;
+        lookbackMinutes = rule.lookbackWindowMs / 60000;
+      }
+    }
+
     // Assemble context — branches on trigger type
     const isScheduled = eventData.type === 'scheduled';
     const eventDataFields = (eventData.data ?? {}) as Record<string, unknown>;
@@ -56,7 +70,7 @@ export async function handleGenerateContent(job: Job, deps: GenerateContentDeps)
     let context: Record<string, unknown>;
     if (isScheduled) {
       context = {
-        ruleName: eventDataFields.ruleName ?? '',
+        ruleName,
         scheduledAt: eventDataFields.scheduledAt ?? '',
         date: new Date().toLocaleDateString(),
       };
@@ -66,8 +80,8 @@ export async function handleGenerateContent(job: Job, deps: GenerateContentDeps)
         ...eventDataFields,
         source: eventData.source,
         type: eventData.type,
-        lookbackMinutes: 5, // TODO: pass from trigger rule metadata
-        ruleName: '',
+        lookbackMinutes,
+        ruleName,
         date: new Date().toLocaleDateString(),
         direction: changePct >= 0 ? 'up' : 'down',
         directionArrow: changePct >= 0 ? '\u25B2' : '\u25BC',

@@ -64,10 +64,22 @@ export class EventDetector {
           fireMode: rule.fireMode as any,
           cooldownMs: rule.cooldownMs,
           lastFiredAt: rule.lastFiredAt,
+          lastPredicateResult: rule.lastPredicateResult ?? undefined,
           contentConfig,
         };
 
         const shouldFire = evaluator.evaluate(ruleInput, event);
+
+        // Update lastPredicateResult for threshold_cross tracking
+        const predicates = condition.predicates ?? [];
+        const currentPredicateResult = predicates.length === 0 ? true :
+          (condition.logic === 'OR'
+            ? predicates.some((p: any) => typeof (event.data as any)[p.field] === 'number' && this.evalPredicate(p, event.data))
+            : predicates.every((p: any) => typeof (event.data as any)[p.field] === 'number' && this.evalPredicate(p, event.data)));
+
+        await this.deps.db.update(triggerRules)
+          .set({ lastPredicateResult: currentPredicateResult })
+          .where(eq(triggerRules.id, rule.id));
 
         if (!shouldFire) {
           this.deps.logger.info({
@@ -80,14 +92,7 @@ export class EventDetector {
           continue;
         }
 
-        this.deps.logger.info({ rule: rule.name, event: (event.data as any).instrument ?? event.type }, 'Trigger rule fired');
-
-        // Update last_fired_at
-        await this.deps.db.update(triggerRules)
-          .set({ lastFiredAt: new Date() })
-          .where(eq(triggerRules.id, rule.id));
-
-        // Resolve templates from content_config
+        // Resolve templates BEFORE updating last_fired_at
         const allTemplates = await this.deps.db.select().from(contentTemplates)
           .where(and(
             eq(contentTemplates.verticalId, verticalId),
@@ -98,9 +103,25 @@ export class EventDetector {
           contentConfig.templateNames.includes(t.name)
         );
 
+        // Validate templates exist — don't consume cooldown if misconfigured
+        if (selectedTemplates.length === 0) {
+          this.deps.logger.error({
+            rule: rule.name,
+            templateNames: contentConfig.templateNames,
+          }, 'No matching enabled templates found — skipping without consuming cooldown');
+          continue;
+        }
+
         if (contentConfig.templateSelection === 'random' && selectedTemplates.length > 0) {
           selectedTemplates = [selectedTemplates[Math.floor(Math.random() * selectedTemplates.length)]];
         }
+
+        this.deps.logger.info({ rule: rule.name, event: (event.data as any).instrument ?? event.type }, 'Trigger rule fired');
+
+        // Update last_fired_at AFTER template validation
+        await this.deps.db.update(triggerRules)
+          .set({ lastFiredAt: new Date() })
+          .where(eq(triggerRules.id, rule.id));
 
         for (const template of selectedTemplates) {
           await this.deps.jobQueue.enqueue('generate-content', {
@@ -111,6 +132,19 @@ export class EventDetector {
           });
         }
       }
+    }
+  }
+
+  private evalPredicate(predicate: { field: string; operator: string; value: number }, data: Record<string, unknown>): boolean {
+    const actual = data[predicate.field];
+    if (typeof actual !== 'number') return false;
+    switch (predicate.operator) {
+      case 'gt': return actual > predicate.value;
+      case 'gte': return actual >= predicate.value;
+      case 'lt': return actual < predicate.value;
+      case 'lte': return actual <= predicate.value;
+      case 'eq': return actual === predicate.value;
+      default: return false;
     }
   }
 }

@@ -1,0 +1,1 @@
+ALTER TABLE "trigger_rules" ADD COLUMN "last_predicate_result" boolean;
