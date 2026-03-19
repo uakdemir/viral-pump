@@ -15,6 +15,7 @@ export const contentItems = pgTable('content_items', {
   finalText: text('final_text'),
   reviewNotes: text('review_notes'),
   editedAt: timestamp('edited_at', { withTimezone: true }),
+  tags: jsonb('tags').notNull().default([]),
   aiConfig: jsonb('ai_config').notNull().default({}),
   cost: jsonb('cost').notNull().default({}),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

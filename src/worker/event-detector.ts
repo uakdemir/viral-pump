@@ -1,15 +1,24 @@
 import { eq, and } from 'drizzle-orm';
 import { triggerRules } from '../shared/schema/trigger-rules.js';
 import { contentTemplates } from '../shared/schema/content-templates.js';
+import { verticals } from '../shared/schema/verticals.js';
 import type { DB } from '../shared/db.js';
 import type { DetectedEvent } from '../domain/detected-event.js';
 import type { JobQueue } from '../plugins/job-queue/types.js';
-import { evaluateRule } from '../domain/trigger-evaluator.js';
+import { DefaultTriggerEvaluator, validateContentConfig, type TriggerEvaluator, type RuleInput } from '../domain/trigger-evaluator.js';
+import { createRegistry, type PluginRegistry } from '../plugins/registry.js';
+
+export function createTriggerEvaluatorRegistry(): PluginRegistry<TriggerEvaluator> {
+  const registry = createRegistry<TriggerEvaluator>();
+  registry.register('default', () => new DefaultTriggerEvaluator());
+  return registry;
+}
 
 interface EventDetectorDeps {
   db: DB;
   jobQueue: JobQueue;
-  logger: { info: (...args: any[]) => void; warn: (...args: any[]) => void };
+  evaluatorRegistry: PluginRegistry<TriggerEvaluator>;
+  logger: { info: (...args: any[]) => void; warn: (...args: any[]) => void; error: (...args: any[]) => void };
 }
 
 export class EventDetector {
@@ -20,6 +29,12 @@ export class EventDetector {
   }
 
   async processEvents(events: DetectedEvent[], verticalId: string): Promise<void> {
+    // Resolve evaluator from vertical config
+    const [vertical] = await this.deps.db.select().from(verticals)
+      .where(eq(verticals.id, verticalId));
+    const evaluatorName = (vertical?.config as any)?.defaults?.triggerEvaluator ?? 'default';
+    const evaluator = this.deps.evaluatorRegistry.resolve(evaluatorName, {});
+
     const rules = await this.deps.db.select().from(triggerRules)
       .where(and(
         eq(triggerRules.verticalId, verticalId),
@@ -28,40 +43,66 @@ export class EventDetector {
 
     for (const event of events) {
       for (const rule of rules) {
-        const condition = rule.condition as { match: Record<string, string>; predicate: { field: string; operator: string; value: number } };
-        const shouldFire = evaluateRule({
-          condition,
-          fireMode: rule.fireMode as 'threshold_cross' | 'stateful_true' | 'every_poll',
+        // Skip scheduled rules — they're handled by the cron scheduler
+        if (rule.fireMode === 'scheduled') continue;
+
+        const condition = rule.condition as any;
+        const contentConfig = rule.contentConfig as any;
+
+        // Validate content_config
+        if (!validateContentConfig(contentConfig)) {
+          this.deps.logger.error({ rule: rule.name }, 'Misconfigured content_config — skipping rule');
+          continue;
+        }
+
+        const ruleInput: RuleInput = {
+          condition: {
+            match: condition.match ?? {},
+            predicates: condition.predicates ?? [],
+            logic: condition.logic ?? 'AND',
+          },
+          fireMode: rule.fireMode as any,
           cooldownMs: rule.cooldownMs,
           lastFiredAt: rule.lastFiredAt,
-        }, event);
+          contentConfig,
+        };
+
+        const shouldFire = evaluator.evaluate(ruleInput, event);
 
         if (!shouldFire) {
           this.deps.logger.info({
             rule: rule.name,
-            event: event.instrument,
-            changePct: Number(event.changePct.toFixed(4)),
-            threshold: condition.predicate.value,
+            event: (event.data as any).instrument ?? event.type,
+            changePct: Number(((event.data as any).changePct ?? 0).toFixed(4)),
+            threshold: condition.predicates?.[0]?.value,
             cooldownExpired: !rule.lastFiredAt || (Date.now() - rule.lastFiredAt.getTime() >= rule.cooldownMs),
           }, 'Rule evaluated — did not fire');
           continue;
         }
 
-        this.deps.logger.info({ rule: rule.name, event: event.instrument }, 'Trigger rule fired');
+        this.deps.logger.info({ rule: rule.name, event: (event.data as any).instrument ?? event.type }, 'Trigger rule fired');
 
         // Update last_fired_at
         await this.deps.db.update(triggerRules)
           .set({ lastFiredAt: new Date() })
           .where(eq(triggerRules.id, rule.id));
 
-        // Find matching templates
-        const templates = await this.deps.db.select().from(contentTemplates)
+        // Resolve templates from content_config
+        const allTemplates = await this.deps.db.select().from(contentTemplates)
           .where(and(
             eq(contentTemplates.verticalId, verticalId),
             eq(contentTemplates.enabled, true),
           ));
 
-        for (const template of templates) {
+        let selectedTemplates = allTemplates.filter(t =>
+          contentConfig.templateNames.includes(t.name)
+        );
+
+        if (contentConfig.templateSelection === 'random' && selectedTemplates.length > 0) {
+          selectedTemplates = [selectedTemplates[Math.floor(Math.random() * selectedTemplates.length)]];
+        }
+
+        for (const template of selectedTemplates) {
           await this.deps.jobQueue.enqueue('generate-content', {
             verticalId,
             templateId: template.id,

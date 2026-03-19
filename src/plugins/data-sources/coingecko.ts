@@ -1,5 +1,6 @@
 import type { DetectedEvent } from '../../domain/detected-event.js';
 import type { DataSourceProvider } from './types.js';
+import { logger } from '../../shared/logger.js';
 
 interface CoinGeckoConfig {
   endpoint: string;
@@ -19,14 +20,17 @@ export class CoinGeckoProvider implements DataSourceProvider {
     this.previousPrices.set(instrument, price);
   }
 
-  async poll(): Promise<DetectedEvent[]> {
+  async poll(verticalId: string): Promise<DetectedEvent[]> {
     try {
       const ids = Object.keys(this.config.assets).join(',');
       const vs = this.config.vsCurrencies.join(',');
       const url = `${this.config.endpoint}?ids=${ids}&vs_currencies=${vs}`;
       const res = await fetch(url);
 
-      if (!res.ok) return [];
+      if (!res.ok) {
+        logger.warn({ status: res.status, url }, 'CoinGecko API error');
+        return [];
+      }
 
       const data = await res.json() as Record<string, Record<string, number>>;
       const events: DetectedEvent[] = [];
@@ -45,13 +49,17 @@ export class CoinGeckoProvider implements DataSourceProvider {
 
           events.push({
             source: 'coingecko',
-            instrument,
-            baseCurrency: symbol,
-            quoteCurrency: vs.toUpperCase(),
-            price,
-            previousPrice,
-            changePct,
+            type: 'price-update',
+            verticalId,
             observedAt: now,
+            data: {
+              instrument,
+              baseCurrency: symbol,
+              quoteCurrency: vs.toUpperCase(),
+              price,
+              previousPrice,
+              changePct,
+            },
             rawPayload: data,
           });
 
@@ -60,7 +68,8 @@ export class CoinGeckoProvider implements DataSourceProvider {
       }
 
       return events;
-    } catch {
+    } catch (err) {
+      logger.error({ err }, 'CoinGecko poll failed');
       return [];
     }
   }

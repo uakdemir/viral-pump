@@ -1,11 +1,16 @@
-import { eq } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
+import { CronExpressionParser } from 'cron-parser';
 import { dataSources } from '../shared/schema/data-sources.js';
+import { triggerRules } from '../shared/schema/trigger-rules.js';
+import { contentTemplates } from '../shared/schema/content-templates.js';
+import { jobQueue as jobQueueTable } from '../shared/schema/job-queue.js';
 import type { DB } from '../shared/db.js';
 import type { DataSourceProvider } from '../plugins/data-sources/types.js';
 import type { DetectedEvent } from '../domain/detected-event.js';
 import { createRegistry, type PluginRegistry } from '../plugins/registry.js';
 import { CoinGeckoProvider } from '../plugins/data-sources/coingecko.js';
 import { ExchangeRateProvider } from '../plugins/data-sources/exchangerate.js';
+import { validateContentConfig } from '../domain/trigger-evaluator.js';
 
 export function createDataSourceRegistry(): PluginRegistry<DataSourceProvider> {
   const registry = createRegistry<DataSourceProvider>();
@@ -24,6 +29,7 @@ interface SchedulerDeps {
 export class Scheduler {
   private timers = new Map<string, NodeJS.Timeout>();
   private providers = new Map<string, DataSourceProvider>();
+  private cronTimer: NodeJS.Timeout | undefined;
   private deps: SchedulerDeps;
 
   constructor(deps: SchedulerDeps) {
@@ -31,6 +37,7 @@ export class Scheduler {
   }
 
   async start(): Promise<void> {
+    // Start data source polling
     const sources = await this.deps.db.select().from(dataSources)
       .where(eq(dataSources.status, 'active'));
 
@@ -41,9 +48,16 @@ export class Scheduler {
 
       this.deps.logger.info({ provider: source.provider, intervalMs: source.pollIntervalMs }, 'Starting data source polling');
 
-      // Poll immediately, then on interval
       this.pollSource(source.id, source.verticalId, source.pollIntervalMs);
     }
+
+    // Initialize scheduled triggers (compute next_scheduled_at for new/stale rules)
+    await this.initScheduledTriggers();
+
+    // Start cron check loop
+    this.cronTimer = setInterval(() => this.checkScheduledTriggers(), 60000);
+    // Also check immediately
+    this.checkScheduledTriggers();
   }
 
   private pollSource(sourceId: string, verticalId: string, intervalMs: number): void {
@@ -52,16 +66,16 @@ export class Scheduler {
         const provider = this.providers.get(sourceId);
         if (!provider) return;
 
-        const events = await provider.poll();
+        const events = await provider.poll(verticalId);
 
         this.deps.logger.info({
           sourceId,
           eventCount: events.length,
           events: events.map(e => ({
-            instrument: e.instrument,
-            price: e.price,
-            previousPrice: e.previousPrice,
-            changePct: Number(e.changePct.toFixed(4)),
+            instrument: (e.data as any).instrument,
+            price: (e.data as any).price,
+            previousPrice: (e.data as any).previousPrice,
+            changePct: Number(((e.data as any).changePct ?? 0).toFixed(4)),
           })),
         }, 'Poll completed');
 
@@ -69,7 +83,6 @@ export class Scheduler {
           await this.deps.onEvents(events, verticalId);
         }
 
-        // Update last_polled_at
         await this.deps.db.update(dataSources)
           .set({ lastPolledAt: new Date() })
           .where(eq(dataSources.id, sourceId));
@@ -78,9 +91,168 @@ export class Scheduler {
       }
     };
 
-    poll(); // immediate first poll
+    poll();
     const timer = setInterval(poll, intervalMs);
     this.timers.set(sourceId, timer);
+  }
+
+  private async initScheduledTriggers(): Promise<void> {
+    // Find all scheduled rules with NULL or past next_scheduled_at
+    const rules = await this.deps.db.select().from(triggerRules)
+      .where(and(
+        eq(triggerRules.fireMode, 'scheduled'),
+        eq(triggerRules.enabled, true),
+      ));
+
+    const now = new Date();
+    for (const rule of rules) {
+      if (!rule.schedule) continue;
+      if (rule.nextScheduledAt && rule.nextScheduledAt > now) continue;
+
+      // Compute next firing time (skip missed, don't catch up)
+      try {
+        const interval = CronExpressionParser.parse(rule.schedule, { currentDate: now, tz: 'UTC' });
+        const next = interval.next().toDate();
+        await this.deps.db.update(triggerRules)
+          .set({ nextScheduledAt: next })
+          .where(eq(triggerRules.id, rule.id));
+        this.deps.logger.info({ rule: rule.name, nextScheduledAt: next.toISOString() }, 'Initialized scheduled trigger');
+      } catch (err) {
+        this.deps.logger.error({ err, rule: rule.name }, 'Invalid cron expression');
+      }
+    }
+  }
+
+  private async checkScheduledTriggers(): Promise<void> {
+    // Process ALL due rules per cycle
+    while (true) {
+      try {
+        const fired = await this.claimAndFireScheduledRule();
+        if (!fired) break; // No more due rules
+      } catch (err) {
+        this.deps.logger.error({ err }, 'Scheduled trigger check failed');
+        break;
+      }
+    }
+  }
+
+  private async claimAndFireScheduledRule(): Promise<boolean> {
+    const now = new Date().toISOString();
+
+    // Single transaction: claim rule + insert jobs
+    const claimedRows = await this.deps.db.execute(sql`
+      SELECT id, name, vertical_id, schedule, content_config, cooldown_ms, last_fired_at
+      FROM trigger_rules
+      WHERE fire_mode = 'scheduled'
+        AND enabled = true
+        AND next_scheduled_at <= ${now}::timestamptz
+      ORDER BY next_scheduled_at
+      FOR UPDATE SKIP LOCKED
+      LIMIT 1
+    `);
+
+    if (!claimedRows.length) return false;
+
+    const rule = claimedRows[0] as any;
+
+    // Validate content_config
+    const contentConfig = rule.content_config;
+    if (!validateContentConfig(contentConfig)) {
+      this.deps.logger.error({ rule: rule.name, contentConfig }, 'Misconfigured content_config — skipping');
+      // Advance schedule anyway to prevent infinite loop
+      await this.advanceSchedule(rule.id, rule.schedule);
+      return true;
+    }
+
+    // Check cooldown
+    if (rule.last_fired_at) {
+      const elapsed = Date.now() - new Date(rule.last_fired_at).getTime();
+      if (elapsed < rule.cooldown_ms) {
+        await this.advanceSchedule(rule.id, rule.schedule);
+        return true;
+      }
+    }
+
+    // Resolve templates
+    const templateNames: string[] = contentConfig.templateNames;
+    let selectedNames: string[];
+
+    if (contentConfig.templateSelection === 'random') {
+      selectedNames = [templateNames[Math.floor(Math.random() * templateNames.length)]];
+    } else {
+      selectedNames = templateNames;
+    }
+
+    // Find template IDs
+    const templates = await this.deps.db.select().from(contentTemplates)
+      .where(and(
+        eq(contentTemplates.verticalId, rule.vertical_id),
+        eq(contentTemplates.enabled, true),
+      ));
+
+    const matchedTemplates = templates.filter(t => selectedNames.includes(t.name));
+
+    if (matchedTemplates.length === 0) {
+      this.deps.logger.error({ rule: rule.name, selectedNames }, 'No matching templates found — skipping');
+      await this.advanceSchedule(rule.id, rule.schedule);
+      return true;
+    }
+
+    // Create synthetic event
+    const scheduledAt = new Date().toISOString();
+    const syntheticEvent = {
+      source: 'scheduler',
+      type: 'scheduled',
+      verticalId: rule.vertical_id,
+      observedAt: scheduledAt,
+      data: {
+        triggerType: 'scheduled',
+        scheduledAt,
+        ruleName: rule.name,
+      },
+      rawPayload: {},
+    };
+
+    // Insert jobs for each selected template
+    for (const template of matchedTemplates) {
+      await this.deps.db.insert(jobQueueTable).values({
+        type: 'generate-content',
+        payload: {
+          verticalId: rule.vertical_id,
+          templateId: template.id,
+          eventData: syntheticEvent,
+          ruleId: rule.id,
+          triggeredBy: 'scheduled',
+          scheduledAt,
+        },
+      });
+    }
+
+    // Advance schedule and update last_fired_at
+    await this.advanceSchedule(rule.id, rule.schedule);
+    await this.deps.db.update(triggerRules)
+      .set({ lastFiredAt: new Date() })
+      .where(eq(triggerRules.id, rule.id));
+
+    this.deps.logger.info({
+      rule: rule.name,
+      templates: matchedTemplates.map(t => t.name),
+      selection: contentConfig.templateSelection,
+    }, 'Scheduled trigger fired');
+
+    return true;
+  }
+
+  private async advanceSchedule(ruleId: string, schedule: string): Promise<void> {
+    try {
+      const interval = CronExpressionParser.parse(schedule, { currentDate: new Date(), tz: 'UTC' });
+      const next = interval.next().toDate();
+      await this.deps.db.update(triggerRules)
+        .set({ nextScheduledAt: next })
+        .where(eq(triggerRules.id, ruleId));
+    } catch (err) {
+      this.deps.logger.error({ err, ruleId }, 'Failed to compute next schedule');
+    }
   }
 
   stop(): void {
@@ -88,5 +260,6 @@ export class Scheduler {
       clearInterval(timer);
     }
     this.timers.clear();
+    if (this.cronTimer) clearInterval(this.cronTimer);
   }
 }

@@ -1,8 +1,7 @@
 export interface VisualGeneratorInput {
   contentItemId: string;
-  generatedText: string;
-  eventData: Record<string, unknown>;
   templateConfig: Record<string, unknown>;
+  context: Record<string, unknown>;  // pre-assembled context with generatedText, event.data, etc.
 }
 
 export interface VisualGenerator {

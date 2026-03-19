@@ -6,7 +6,7 @@ describe('CoinGeckoProvider', () => {
     vi.restoreAllMocks();
   });
 
-  it('returns DetectedEvent for gold price', async () => {
+  it('returns generic DetectedEvent with fields in data', async () => {
     const mockResponse = { gold: { usd: 2350 } };
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
       new Response(JSON.stringify(mockResponse), { status: 200 })
@@ -20,13 +20,15 @@ describe('CoinGeckoProvider', () => {
 
     provider.setPreviousPrice('XAU/USD', 2320);
 
-    const events = await provider.poll();
+    const events = await provider.poll('vertical-1');
     expect(events).toHaveLength(1);
     expect(events[0].source).toBe('coingecko');
-    expect(events[0].instrument).toBe('XAU/USD');
-    expect(events[0].price).toBe(2350);
-    expect(events[0].previousPrice).toBe(2320);
-    expect(events[0].changePct).toBeCloseTo(1.29, 1);
+    expect(events[0].type).toBe('price-update');
+    expect(events[0].verticalId).toBe('vertical-1');
+    expect(events[0].data.instrument).toBe('XAU/USD');
+    expect(events[0].data.price).toBe(2350);
+    expect(events[0].data.previousPrice).toBe(2320);
+    expect((events[0].data.changePct as number)).toBeCloseTo(1.29, 1);
   });
 
   it('returns empty array on fetch error', async () => {
@@ -37,7 +39,7 @@ describe('CoinGeckoProvider', () => {
       vsCurrencies: ['usd'],
     });
 
-    const events = await provider.poll();
+    const events = await provider.poll('v1');
     expect(events).toEqual([]);
   });
 
@@ -52,7 +54,7 @@ describe('CoinGeckoProvider', () => {
       vsCurrencies: ['usd'],
     });
 
-    const events = await provider.poll();
+    const events = await provider.poll('v1');
     expect(events).toEqual([]);
   });
 });

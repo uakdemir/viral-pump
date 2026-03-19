@@ -1,19 +1,10 @@
 import OpenAI from 'openai';
 import type { ContentGenerator, ContentGeneratorInput, ContentGeneratorOutput } from './types.js';
+import { fillPromptTemplate } from '../../shared/template-filler.js';
 
 interface OpenAIConfig {
   apiKey: string;
   model: string;
-}
-
-function fillTemplate(template: string, event: Record<string, unknown>): string {
-  return template.replace(/\{\{(\w+)\}\}/g, (_, key) => {
-    if (key === 'lookbackMinutes') return '5';
-    if (key === 'direction') {
-      return (event.changePct as number) >= 0 ? 'up' : 'down';
-    }
-    return String(event[key] ?? '');
-  });
 }
 
 export class OpenAIContentGenerator implements ContentGenerator {
@@ -27,7 +18,7 @@ export class OpenAIContentGenerator implements ContentGenerator {
 
   async generate(input: ContentGeneratorInput): Promise<ContentGeneratorOutput> {
     const start = Date.now();
-    const prompt = fillTemplate(input.promptTemplate, input.event as unknown as Record<string, unknown>);
+    const prompt = fillPromptTemplate(input.promptTemplate, input.context);
     const temperature = (input.generationConfig?.temperature as number) ?? 0.7;
 
     const response = await this.client.chat.completions.create({
@@ -37,11 +28,39 @@ export class OpenAIContentGenerator implements ContentGenerator {
       messages: [{ role: 'user', content: prompt }],
     });
 
+    const rawText = response.choices[0]?.message?.content ?? '';
+    const { text, tags } = parseResponse(rawText);
+
     return {
-      text: response.choices[0]?.message?.content ?? '',
+      text,
+      tags,
       tokensUsed: response.usage?.total_tokens ?? 0,
       model: this.model,
       durationMs: Date.now() - start,
     };
   }
+}
+
+function parseResponse(raw: string): { text: string; tags: string[] } {
+  const tagsMatch = raw.match(/tags:\s*(.*)/i);
+
+  let text: string;
+  let tags: string[] = [];
+
+  if (tagsMatch) {
+    const tagsIndex = raw.toLowerCase().lastIndexOf('tags:');
+    text = raw.substring(0, tagsIndex).trim();
+    tags = tagsMatch[1]
+      .split(',')
+      .map(t => t.trim().toLowerCase())
+      .filter(t => t.length > 0);
+  } else {
+    text = raw.trim();
+  }
+
+  if (text.toLowerCase().startsWith('tweet:')) {
+    text = text.substring(6).trim();
+  }
+
+  return { text, tags };
 }

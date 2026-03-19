@@ -20,7 +20,7 @@ export class ExchangeRateProvider implements DataSourceProvider {
     this.previousRates.set(instrument, rate);
   }
 
-  async poll(): Promise<DetectedEvent[]> {
+  async poll(verticalId: string): Promise<DetectedEvent[]> {
     try {
       // Supports both open.er-api.com (/v6/latest/USD) and exchangerate.host (?base=USD&symbols=...)
       const url = this.config.endpoint.includes('/v6/')
@@ -55,13 +55,17 @@ export class ExchangeRateProvider implements DataSourceProvider {
 
         events.push({
           source: 'exchangerate',
-          instrument,
-          baseCurrency: this.config.base,
-          quoteCurrency: symbol,
-          price: rate,
-          previousPrice: previousRate ?? rate,
-          changePct,
+          type: 'rate-update',
+          verticalId,
           observedAt: now,
+          data: {
+            instrument,
+            baseCurrency: this.config.base,
+            quoteCurrency: symbol,
+            price: rate,
+            previousPrice: previousRate ?? rate,
+            changePct,
+          },
           rawPayload: data as Record<string, unknown>,
         });
 

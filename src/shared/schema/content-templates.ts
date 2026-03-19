@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, jsonb, boolean, timestamp } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, jsonb, boolean, timestamp, unique } from 'drizzle-orm/pg-core';
 import { verticals } from './verticals.js';
 
 export const contentTemplates = pgTable('content_templates', {
@@ -15,4 +15,6 @@ export const contentTemplates = pgTable('content_templates', {
   enabled: boolean('enabled').notNull().default(true),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  unique('uq_content_templates_vertical_name').on(table.verticalId, table.name),
+]);

@@ -1,19 +1,11 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { ContentGenerator, ContentGeneratorInput, ContentGeneratorOutput } from './types.js';
+import { fillPromptTemplate } from '../../shared/template-filler.js';
+import { logger } from '../../shared/logger.js';
 
 interface ClaudeConfig {
   apiKey: string;
   model: string;
-}
-
-function fillTemplate(template: string, event: Record<string, unknown>): string {
-  return template.replace(/\{\{(\w+)\}\}/g, (_, key) => {
-    if (key === 'lookbackMinutes') return '5';
-    if (key === 'direction') {
-      return (event.changePct as number) >= 0 ? 'up' : 'down';
-    }
-    return String(event[key] ?? '');
-  });
 }
 
 export class ClaudeContentGenerator implements ContentGenerator {
@@ -27,7 +19,7 @@ export class ClaudeContentGenerator implements ContentGenerator {
 
   async generate(input: ContentGeneratorInput): Promise<ContentGeneratorOutput> {
     const start = Date.now();
-    const prompt = fillTemplate(input.promptTemplate, input.event as unknown as Record<string, unknown>);
+    const prompt = fillPromptTemplate(input.promptTemplate, input.context);
     const temperature = (input.generationConfig?.temperature as number) ?? 0.7;
 
     const response = await this.client.messages.create({
@@ -37,16 +29,48 @@ export class ClaudeContentGenerator implements ContentGenerator {
       messages: [{ role: 'user', content: prompt }],
     });
 
-    const text = response.content
-      .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+    const rawText = response.content
+      .filter((b) => b.type === 'text')
       .map((b) => b.text)
       .join('');
 
+    const { text, tags } = parseResponse(rawText);
+
     return {
       text,
+      tags,
       tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
       model: this.model,
       durationMs: Date.now() - start,
     };
   }
+}
+
+function parseResponse(raw: string): { text: string; tags: string[] } {
+  // Split on "Tags:" (case-insensitive)
+  const tagsMatch = raw.match(/tags:\s*(.*)/i);
+
+  let text: string;
+  let tags: string[] = [];
+
+  if (tagsMatch) {
+    // Everything before "Tags:" is the tweet text
+    const tagsIndex = raw.toLowerCase().lastIndexOf('tags:');
+    text = raw.substring(0, tagsIndex).trim();
+
+    // Parse comma-separated tags
+    tags = tagsMatch[1]
+      .split(',')
+      .map(t => t.trim().toLowerCase())
+      .filter(t => t.length > 0);
+  } else {
+    text = raw.trim();
+  }
+
+  // Strip "Tweet:" prefix if present
+  if (text.toLowerCase().startsWith('tweet:')) {
+    text = text.substring(6).trim();
+  }
+
+  return { text, tags };
 }

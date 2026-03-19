@@ -1,74 +1,144 @@
 import { describe, it, expect } from 'vitest';
-import { evaluateRule, matchesEvent } from '../../src/domain/trigger-evaluator.js';
+import { DefaultTriggerEvaluator, matchesEvent, validateContentConfig } from '../../src/domain/trigger-evaluator.js';
 import type { DetectedEvent } from '../../src/domain/detected-event.js';
 
 const goldEvent: DetectedEvent = {
   source: 'coingecko',
-  instrument: 'XAU/USD',
-  baseCurrency: 'XAU',
-  quoteCurrency: 'USD',
-  price: 2350,
-  previousPrice: 2320,
-  changePct: 1.29,
+  type: 'price-update',
+  verticalId: 'v1',
   observedAt: new Date(),
+  data: {
+    instrument: 'BTC/USD',
+    baseCurrency: 'BTC',
+    quoteCurrency: 'USD',
+    price: 74141,
+    previousPrice: 74100,
+    changePct: 1.29,
+  },
   rawPayload: {},
 };
 
 describe('matchesEvent', () => {
-  it('matches when all match fields align', () => {
-    const condition = { match: { source: 'coingecko', instrument: 'XAU/USD' }, predicate: { field: 'changePct', operator: 'gt', value: 1.0 } };
-    expect(matchesEvent(condition, goldEvent)).toBe(true);
+  it('matches top-level source field', () => {
+    expect(matchesEvent({ source: 'coingecko' }, goldEvent)).toBe(true);
   });
 
   it('does not match different source', () => {
-    const condition = { match: { source: 'exchangerate' }, predicate: { field: 'changePct', operator: 'gt', value: 1.0 } };
-    expect(matchesEvent(condition, goldEvent)).toBe(false);
+    expect(matchesEvent({ source: 'exchangerate' }, goldEvent)).toBe(false);
+  });
+
+  it('matches data-level field (instrument)', () => {
+    expect(matchesEvent({ instrument: 'BTC/USD' }, goldEvent)).toBe(true);
+  });
+
+  it('matches mix of top-level and data fields', () => {
+    expect(matchesEvent({ source: 'coingecko', instrument: 'BTC/USD' }, goldEvent)).toBe(true);
   });
 
   it('matches when match is empty (match any)', () => {
-    const condition = { match: {}, predicate: { field: 'changePct', operator: 'gt', value: 1.0 } };
-    expect(matchesEvent(condition, goldEvent)).toBe(true);
+    expect(matchesEvent({}, goldEvent)).toBe(true);
+  });
+
+  it('matches verticalId as top-level field', () => {
+    expect(matchesEvent({ verticalId: 'v1' }, goldEvent)).toBe(true);
   });
 });
 
-describe('evaluateRule', () => {
-  it('fires when predicate is satisfied and cooldown expired', () => {
-    const rule = {
-      condition: { match: { source: 'coingecko' }, predicate: { field: 'changePct', operator: 'gt', value: 1.0 } },
-      fireMode: 'threshold_cross' as const,
-      cooldownMs: 3600000,
-      lastFiredAt: null,
-    };
-    expect(evaluateRule(rule, goldEvent)).toBe(true);
+describe('DefaultTriggerEvaluator', () => {
+  const evaluator = new DefaultTriggerEvaluator();
+  const validConfig = { templateSelection: 'named' as const, templateNames: ['x'] };
+
+  it('fires when single predicate satisfied and cooldown expired', () => {
+    expect(evaluator.evaluate({
+      condition: { match: { source: 'coingecko' }, predicates: [{ field: 'changePct', operator: 'gt', value: 1.0 }], logic: 'AND' },
+      fireMode: 'threshold_cross', cooldownMs: 3600000, lastFiredAt: null, contentConfig: validConfig,
+    }, goldEvent)).toBe(true);
   });
 
   it('does not fire when within cooldown', () => {
-    const rule = {
-      condition: { match: { source: 'coingecko' }, predicate: { field: 'changePct', operator: 'gt', value: 1.0 } },
-      fireMode: 'threshold_cross' as const,
-      cooldownMs: 3600000,
-      lastFiredAt: new Date(),
-    };
-    expect(evaluateRule(rule, goldEvent)).toBe(false);
+    expect(evaluator.evaluate({
+      condition: { match: { source: 'coingecko' }, predicates: [{ field: 'changePct', operator: 'gt', value: 1.0 }], logic: 'AND' },
+      fireMode: 'threshold_cross', cooldownMs: 3600000, lastFiredAt: new Date(), contentConfig: validConfig,
+    }, goldEvent)).toBe(false);
   });
 
   it('does not fire when predicate not met', () => {
-    const rule = {
-      condition: { match: {}, predicate: { field: 'changePct', operator: 'gt', value: 5.0 } },
-      fireMode: 'threshold_cross' as const,
-      cooldownMs: 0,
-      lastFiredAt: null,
-    };
-    expect(evaluateRule(rule, goldEvent)).toBe(false);
+    expect(evaluator.evaluate({
+      condition: { match: {}, predicates: [{ field: 'changePct', operator: 'gt', value: 5.0 }], logic: 'AND' },
+      fireMode: 'threshold_cross', cooldownMs: 0, lastFiredAt: null, contentConfig: validConfig,
+    }, goldEvent)).toBe(false);
+  });
+
+  it('AND logic — all predicates must pass', () => {
+    expect(evaluator.evaluate({
+      condition: { match: {}, predicates: [
+        { field: 'price', operator: 'gt', value: 70000 },
+        { field: 'changePct', operator: 'gt', value: 1.0 },
+      ], logic: 'AND' },
+      fireMode: 'threshold_cross', cooldownMs: 0, lastFiredAt: null, contentConfig: validConfig,
+    }, goldEvent)).toBe(true);
+  });
+
+  it('AND logic — fails if one predicate fails', () => {
+    expect(evaluator.evaluate({
+      condition: { match: {}, predicates: [
+        { field: 'price', operator: 'gt', value: 70000 },
+        { field: 'changePct', operator: 'gt', value: 5.0 },
+      ], logic: 'AND' },
+      fireMode: 'threshold_cross', cooldownMs: 0, lastFiredAt: null, contentConfig: validConfig,
+    }, goldEvent)).toBe(false);
+  });
+
+  it('OR logic — fires if any predicate passes', () => {
+    expect(evaluator.evaluate({
+      condition: { match: {}, predicates: [
+        { field: 'changePct', operator: 'gt', value: 5.0 },
+        { field: 'price', operator: 'gt', value: 70000 },
+      ], logic: 'OR' },
+      fireMode: 'threshold_cross', cooldownMs: 0, lastFiredAt: null, contentConfig: validConfig,
+    }, goldEvent)).toBe(true);
+  });
+
+  it('does not fire for scheduled fire_mode', () => {
+    expect(evaluator.evaluate({
+      condition: { match: {}, predicates: [], logic: 'AND' },
+      fireMode: 'scheduled', cooldownMs: 0, lastFiredAt: null, contentConfig: validConfig,
+    }, goldEvent)).toBe(false);
+  });
+
+  it('fires with empty predicates (match-only)', () => {
+    expect(evaluator.evaluate({
+      condition: { match: { source: 'coingecko' }, predicates: [], logic: 'AND' },
+      fireMode: 'every_poll', cooldownMs: 0, lastFiredAt: null, contentConfig: validConfig,
+    }, goldEvent)).toBe(true);
   });
 
   it('supports lt operator', () => {
-    const rule = {
-      condition: { match: {}, predicate: { field: 'price', operator: 'lt', value: 3000 } },
-      fireMode: 'threshold_cross' as const,
-      cooldownMs: 0,
-      lastFiredAt: null,
-    };
-    expect(evaluateRule(rule, goldEvent)).toBe(true);
+    expect(evaluator.evaluate({
+      condition: { match: {}, predicates: [{ field: 'price', operator: 'lt', value: 100000 }], logic: 'AND' },
+      fireMode: 'threshold_cross', cooldownMs: 0, lastFiredAt: null, contentConfig: validConfig,
+    }, goldEvent)).toBe(true);
+  });
+});
+
+describe('validateContentConfig', () => {
+  it('accepts valid named config', () => {
+    expect(validateContentConfig({ templateSelection: 'named', templateNames: ['a', 'b'] })).toBe(true);
+  });
+
+  it('accepts valid random config', () => {
+    expect(validateContentConfig({ templateSelection: 'random', templateNames: ['a'] })).toBe(true);
+  });
+
+  it('rejects empty templateNames', () => {
+    expect(validateContentConfig({ templateSelection: 'named', templateNames: [] })).toBe(false);
+  });
+
+  it('rejects missing templateSelection', () => {
+    expect(validateContentConfig({ templateNames: ['a'] })).toBe(false);
+  });
+
+  it('rejects null', () => {
+    expect(validateContentConfig(null)).toBe(false);
   });
 });

@@ -2,13 +2,10 @@ import { z } from 'zod';
 
 export const DetectedEventSchema = z.object({
   source: z.string(),
-  instrument: z.string(),
-  baseCurrency: z.string(),
-  quoteCurrency: z.string(),
-  price: z.number(),
-  previousPrice: z.number(),
-  changePct: z.number(),
+  type: z.string(),
+  verticalId: z.string(),
   observedAt: z.date(),
+  data: z.record(z.string(), z.unknown()),
   rawPayload: z.record(z.string(), z.unknown()),
 });
 

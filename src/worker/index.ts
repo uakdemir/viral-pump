@@ -13,7 +13,7 @@ import { createRegistry } from '../plugins/registry.js';
 import type { ContentGenerator } from '../plugins/content-generators/types.js';
 import type { PostingStrategy } from '../plugins/posting-strategies/types.js';
 import { Scheduler, createDataSourceRegistry } from './scheduler.js';
-import { EventDetector } from './event-detector.js';
+import { EventDetector, createTriggerEvaluatorRegistry } from './event-detector.js';
 import { handleGenerateContent } from './handlers/generate-content.js';
 import { handleGenerateVisual } from './handlers/generate-visual.js';
 import { handlePostToPlatform } from './handlers/post-to-platform.js';
@@ -57,8 +57,11 @@ const appCredentials = {
   apiSecret: config.TWITTER_API_SECRET ?? '',
 };
 
+// Trigger evaluator registry
+const evaluatorRegistry = createTriggerEvaluatorRegistry();
+
 // Event detector
-const eventDetector = new EventDetector({ db, jobQueue, logger });
+const eventDetector = new EventDetector({ db, jobQueue, evaluatorRegistry, logger });
 
 // Scheduler
 const dataSourceRegistry = createDataSourceRegistry();

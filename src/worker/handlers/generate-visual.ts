@@ -13,19 +13,17 @@ interface GenerateVisualDeps {
 }
 
 export async function handleGenerateVisual(job: Job, deps: GenerateVisualDeps): Promise<void> {
-  const { contentItemId, generatedText, eventData, visualConfig } = job.payload as {
+  const { contentItemId, templateConfig, context } = job.payload as {
     contentItemId: string;
-    generatedText: string;
-    eventData: Record<string, unknown>;
-    visualConfig: Record<string, unknown>;
+    templateConfig: Record<string, unknown>;
+    context: Record<string, unknown>;
   };
 
   try {
     const buffer = await deps.visualGenerator.generate({
       contentItemId,
-      generatedText,
-      eventData,
-      templateConfig: visualConfig?.config as Record<string, unknown> ?? {},
+      templateConfig,
+      context,
     });
 
     const visualUrl = await deps.assetStore.store(contentItemId, buffer, 'png');
