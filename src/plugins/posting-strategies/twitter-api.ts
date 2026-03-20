@@ -44,6 +44,10 @@ export class TwitterApiPostingStrategy implements PostingStrategy {
       if (input.media.type !== 'image' && input.media.type !== 'gif') {
         throw new Error(`Twitter strategy only supports image/gif media this milestone (got ${input.media.type})`);
       }
+      const allowedMimes = ['image/jpeg', 'image/png', 'image/gif'];
+      if (input.media.mimeType && !allowedMimes.includes(input.media.mimeType)) {
+        throw new Error(`Twitter only accepts JPEG/PNG/GIF (got ${input.media.mimeType})`);
+      }
       if (input.media.fileSizeBytes && input.media.fileSizeBytes > MAX_FILE_SIZE_BYTES) {
         throw new Error(`Media file size exceeds 5 MB limit (got ${input.media.fileSizeBytes} bytes)`);
       }

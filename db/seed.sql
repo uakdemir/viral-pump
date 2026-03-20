@@ -106,7 +106,7 @@ INSERT INTO trigger_rules (id, vertical_id, name, condition, content_config, fir
 );
 
 -- Content Templates (updated with tag extraction)
-INSERT INTO content_templates (id, vertical_id, name, category, content_layer, platform, prompt_template, visual_template, generation_config, tags, enabled) VALUES
+INSERT INTO content_templates (id, vertical_id, name, category, content_layer, platform, prompt_template, visual_template, platform_meta, generation_config, tags, enabled) VALUES
 (
   '00000000-0000-0000-0000-000000000007',
   '00000000-0000-0000-0000-000000000001',
@@ -131,6 +131,7 @@ Return your response in this format:
 Tweet: <your tweet text>
 Tags: <2-5 comma-separated tags from: urgent, data-driven, historical, prediction, educational>',
   '{ "template": "price-card", "config": { "width": 1200, "height": 628 } }'::jsonb,
+  '{}'::jsonb,
   '{ "temperature": 0.7 }'::jsonb,
   '["urgent", "data-driven"]'::jsonb, true
 ),
@@ -158,6 +159,7 @@ Return your response in this format:
 Tweet: <your tweet text>
 Tags: <2-5 comma-separated tags from: urgent, data-driven, historical, prediction, educational>',
   '{ "template": "price-card", "config": { "width": 1200, "height": 628 } }'::jsonb,
+  '{}'::jsonb,
   '{ "temperature": 0.7 }'::jsonb,
   '["urgent", "data-driven"]'::jsonb, true
 ),
@@ -181,7 +183,7 @@ Requirements:
 - Do NOT give financial advice
 
 Return your response in this format:
-Tweet: <your caption text>
+Caption: <your caption text>
 Tags: <2-5 comma-separated tags from: urgent, data-driven, historical, prediction, educational>',
   '{ "template": "price-card", "config": { "width": 1080, "height": 1080 } }'::jsonb,
   '{}'::jsonb,
@@ -266,7 +268,7 @@ INSERT INTO trigger_rules (id, vertical_id, name, condition, content_config, fir
 );
 
 -- Content Templates
-INSERT INTO content_templates (id, vertical_id, name, category, content_layer, platform, prompt_template, visual_template, generation_config, tags, enabled) VALUES
+INSERT INTO content_templates (id, vertical_id, name, category, content_layer, platform, prompt_template, visual_template, platform_meta, generation_config, tags, enabled) VALUES
 (
   '00000000-0000-0000-0000-000000000015',
   '00000000-0000-0000-0000-000000000010',
@@ -283,6 +285,7 @@ Return your response in this format:
 Tweet: <your tweet text>
 Tags: <2-5 comma-separated tags from: motivation, discipline, nutrition, workout, recovery, mindset, beginner, advanced>',
   '{ "template": "tip-card", "config": { "width": 1200, "height": 628 } }'::jsonb,
+  '{}'::jsonb,
   '{ "temperature": 0.8 }'::jsonb,
   '["workout", "educational"]'::jsonb, true
 ),
@@ -302,6 +305,7 @@ Return your response in this format:
 Tweet: <your tweet text>
 Tags: <2-5 comma-separated tags from: motivation, discipline, nutrition, workout, recovery, mindset, beginner, advanced>',
   '{ "template": "stat-card", "config": { "width": 1200, "height": 628 } }'::jsonb,
+  '{}'::jsonb,
   '{ "temperature": 0.7 }'::jsonb,
   '["nutrition", "educational"]'::jsonb, true
 ),
@@ -321,6 +325,7 @@ Return your response in this format:
 Tweet: <your tweet text>
 Tags: <2-5 comma-separated tags from: motivation, discipline, nutrition, workout, recovery, mindset, beginner, advanced>',
   '{ "template": "quote-card", "config": { "width": 1200, "height": 628 } }'::jsonb,
+  '{}'::jsonb,
   '{ "temperature": 0.9 }'::jsonb,
   '["motivation", "mindset"]'::jsonb, true
 ),
@@ -340,6 +345,7 @@ Return your response in this format:
 Tweet: <your tweet text>
 Tags: <2-5 comma-separated tags from: motivation, discipline, nutrition, workout, recovery, mindset, beginner, advanced>',
   '{ "template": "tip-card", "config": { "width": 1200, "height": 628 } }'::jsonb,
+  '{}'::jsonb,
   '{ "temperature": 0.7 }'::jsonb,
   '["educational", "nutrition"]'::jsonb, true
 ),
@@ -356,7 +362,7 @@ Requirements:
 - Do NOT use hashtags
 
 Return your response in this format:
-Tweet: <your description>
+Description: <your description>
 Tags: <2-5 comma-separated tags from: motivation, discipline, nutrition, workout, recovery, mindset, beginner, advanced>',
   '{ "template": "tip-card", "config": { "width": 1000, "height": 1500 } }'::jsonb,
   '{ "boardId": "fitness-tips-board" }'::jsonb,
@@ -437,7 +443,7 @@ INSERT INTO trigger_rules (id, vertical_id, name, condition, content_config, fir
 );
 
 -- Content Templates
-INSERT INTO content_templates (id, vertical_id, name, category, content_layer, platform, prompt_template, visual_template, generation_config, tags, enabled) VALUES
+INSERT INTO content_templates (id, vertical_id, name, category, content_layer, platform, prompt_template, visual_template, platform_meta, generation_config, tags, enabled) VALUES
 (
   '00000000-0000-0000-0000-000000000025',
   '00000000-0000-0000-0000-000000000020',
@@ -455,6 +461,7 @@ Return your response in this format:
 Tweet: <your tweet text>
 Tags: <2-5 comma-separated tags from: safety, self-worth, humor, red-flag, green-flag, conversation, psychology, confidence>',
   '{ "template": "tip-card", "config": { "width": 1200, "height": 628 } }'::jsonb,
+  '{}'::jsonb,
   '{ "temperature": 0.8 }'::jsonb,
   '["conversation", "confidence"]'::jsonb, true
 ),
@@ -474,6 +481,7 @@ Return your response in this format:
 Tweet: <your tweet text>
 Tags: <2-5 comma-separated tags from: safety, self-worth, humor, red-flag, green-flag, conversation, psychology, confidence>',
   '{ "template": "quote-card", "config": { "width": 1200, "height": 628 } }'::jsonb,
+  '{}'::jsonb,
   '{ "temperature": 0.8 }'::jsonb,
   '["red-flag", "safety"]'::jsonb, true
 ),
@@ -493,6 +501,7 @@ Return your response in this format:
 Tweet: <your tweet text>
 Tags: <2-5 comma-separated tags from: safety, self-worth, humor, red-flag, green-flag, conversation, psychology, confidence>',
   '{ "template": "quote-card", "config": { "width": 1200, "height": 628 } }'::jsonb,
+  '{}'::jsonb,
   '{ "temperature": 0.8 }'::jsonb,
   '["green-flag", "self-worth"]'::jsonb, true
 ),
@@ -512,6 +521,7 @@ Return your response in this format:
 Tweet: <your tweet text>
 Tags: <2-5 comma-separated tags from: safety, self-worth, humor, red-flag, green-flag, conversation, psychology, confidence>',
   '{ "template": "tip-card", "config": { "width": 1200, "height": 628 } }'::jsonb,
+  '{}'::jsonb,
   '{ "temperature": 0.9 }'::jsonb,
   '["conversation", "humor"]'::jsonb, true
 ),
@@ -528,7 +538,7 @@ Requirements:
 - Do NOT be creepy or manipulative
 
 Return your response in this format:
-Tweet: <your caption text>
+Caption: <your caption text>
 Tags: <2-5 comma-separated tags from: safety, self-worth, humor, red-flag, green-flag, conversation, psychology, confidence>',
   '{ "template": "tip-card", "config": { "width": 1080, "height": 1350 } }'::jsonb,
   '{}'::jsonb,

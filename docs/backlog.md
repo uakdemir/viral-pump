@@ -24,6 +24,16 @@ Items move from here into sub-project specs when ready to implement.
 **Context:** `processEvents` queries the verticals table on every poll cycle to resolve the trigger evaluator name. The config almost never changes. Cache per vertical, refresh on startup or explicit signal.
 **Decided:** 2026-03-19 (code review finding)
 
+### Migrate LinkedIn API from deprecated ugcPosts to Community Management API
+**Priority:** Medium (before first real LinkedIn deployment)
+**Context:** Current implementation uses `v2/ugcPosts` and `v2/assets` endpoints which LinkedIn deprecated in 2023 in favor of Community Management API (`/rest/posts` + `/rest/images`). Works in dry-run but may fail when switching to real credentials.
+**Decided:** 2026-03-20 (code review finding)
+
+### Add handler-level tests for post-to-platform
+**Priority:** Medium
+**Context:** `handlePostToPlatform` orchestrates strategy resolution, media metadata, platformMeta merge, dry-run flow, validation failure handling, and success persistence. None of this is directly tested — only validators and routing have tests. Repeatedly flagged in code reviews.
+**Decided:** 2026-03-20 (code review finding)
+
 ### Add integration tests for EventDetector and Scheduler
 **Priority:** Low
 **Context:** Core orchestration classes have no unit tests — only the pure domain functions are tested. Would require mock DB and mock job queue.
