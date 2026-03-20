@@ -60,7 +60,6 @@ export class TelegramApiPostingStrategy implements PostingStrategy {
       const formData = new FormData();
       formData.append('chat_id', chatId);
       formData.append('caption', input.text);
-      formData.append('parse_mode', 'HTML');
       formData.append('photo', new Blob([imageBuffer], { type: input.media.mimeType }), 'image.jpg');
 
       const res = await fetch(`${baseUrl}/sendPhoto`, {
@@ -85,7 +84,6 @@ export class TelegramApiPostingStrategy implements PostingStrategy {
         body: JSON.stringify({
           chat_id: chatId,
           text: input.text,
-          parse_mode: 'HTML',
         }),
       });
 

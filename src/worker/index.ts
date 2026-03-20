@@ -32,7 +32,7 @@ import { JOB_TYPES, DEFAULT_LLM_MODEL } from '../shared/constants.js';
 const logger = createChildLogger({ process: 'worker', workerId: config.WORKER_ID });
 const db = createDb(config.VIRAL_DATABASE_URL);
 const jobQueue = new PostgresJobQueue(db);
-const assetStore = new LocalVolumeAssetStore(config.ASSET_DIR);
+const assetStore = new LocalVolumeAssetStore(config.ASSET_DIR, config.PUBLIC_ASSET_BASE_URL);
 const visualGenerator = new PuppeteerHtmlVisualGenerator();
 
 // Content generator registry

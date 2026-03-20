@@ -12,6 +12,7 @@ const envSchema = z.object({
   // Per-account access tokens are stored in accounts.credentials JSONB, not in env
   WORKER_ID: z.string().default(`worker-${process.pid}`),
   ASSET_DIR: z.string().default('./assets'),
+  PUBLIC_ASSET_BASE_URL: z.string().default('http://localhost:3001/assets'), // public URL base for platform APIs (Instagram, Pinterest)
   PORT: z.coerce.number().default(3001),
   AUTH_SECRET: z.string().default('dev-secret'),
 });

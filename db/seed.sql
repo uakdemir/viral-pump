@@ -160,6 +160,33 @@ Tags: <2-5 comma-separated tags from: urgent, data-driven, historical, predictio
   '{ "template": "price-card", "config": { "width": 1200, "height": 628 } }'::jsonb,
   '{ "temperature": 0.7 }'::jsonb,
   '["urgent", "data-driven"]'::jsonb, true
+),
+-- Platform-specific: Instagram (1080x1080 square)
+(
+  '00000000-0000-0000-0000-0000000000d1',
+  '00000000-0000-0000-0000-000000000001',
+  'gold-price-alert-instagram', 'real-time-event', 'L1', 'instagram',
+  'You are a concise financial content writer for Instagram. Write a caption (max 2000 chars) about this price movement.
+
+Event data:
+- Instrument: {{instrument}}
+- Current price: ${{price}}
+- Change: {{changePct}}% in the last {{lookbackMinutes}} minutes
+- Direction: {{direction}}
+
+Requirements:
+- Lead with the key number
+- More detail than a tweet — add context and analysis
+- Use a data-driven, no-hype tone
+- Do NOT give financial advice
+
+Return your response in this format:
+Tweet: <your caption text>
+Tags: <2-5 comma-separated tags from: urgent, data-driven, historical, prediction, educational>',
+  '{ "template": "price-card", "config": { "width": 1080, "height": 1080 } }'::jsonb,
+  '{}'::jsonb,
+  '{ "temperature": 0.7 }'::jsonb,
+  '["urgent", "data-driven"]'::jsonb, true
 );
 
 -- ============================================================
@@ -315,6 +342,26 @@ Tags: <2-5 comma-separated tags from: motivation, discipline, nutrition, workout
   '{ "template": "tip-card", "config": { "width": 1200, "height": 628 } }'::jsonb,
   '{ "temperature": 0.7 }'::jsonb,
   '["educational", "nutrition"]'::jsonb, true
+),
+-- Platform-specific: Pinterest (1000x1500, 2:3 ratio)
+(
+  '00000000-0000-0000-0000-0000000000d2',
+  '00000000-0000-0000-0000-000000000010',
+  'fitness-tip-pinterest', 'tip', 'L1', 'pinterest',
+  'You are a fitness content creator for Pinterest. Write a Pin description (max 500 chars) with a practical fitness tip.
+
+Requirements:
+- One specific, actionable tip
+- Tone: encouraging, knowledgeable
+- Do NOT use hashtags
+
+Return your response in this format:
+Tweet: <your description>
+Tags: <2-5 comma-separated tags from: motivation, discipline, nutrition, workout, recovery, mindset, beginner, advanced>',
+  '{ "template": "tip-card", "config": { "width": 1000, "height": 1500 } }'::jsonb,
+  '{ "boardId": "fitness-tips-board" }'::jsonb,
+  '{ "temperature": 0.8 }'::jsonb,
+  '["workout", "educational"]'::jsonb, true
 );
 
 -- ============================================================
@@ -467,4 +514,24 @@ Tags: <2-5 comma-separated tags from: safety, self-worth, humor, red-flag, green
   '{ "template": "tip-card", "config": { "width": 1200, "height": 628 } }'::jsonb,
   '{ "temperature": 0.9 }'::jsonb,
   '["conversation", "humor"]'::jsonb, true
+),
+-- Platform-specific: Instagram (1080x1350, 4:5 ratio)
+(
+  '00000000-0000-0000-0000-0000000000d3',
+  '00000000-0000-0000-0000-000000000020',
+  'dating-tip-instagram', 'tip', 'L1', 'instagram',
+  'You are a dating advice content creator for Instagram. Write a caption (max 2000 chars) with a practical dating tip.
+
+Requirements:
+- One specific, relatable piece of advice
+- Tone: witty, empowering, like your best friend
+- Do NOT be creepy or manipulative
+
+Return your response in this format:
+Tweet: <your caption text>
+Tags: <2-5 comma-separated tags from: safety, self-worth, humor, red-flag, green-flag, conversation, psychology, confidence>',
+  '{ "template": "tip-card", "config": { "width": 1080, "height": 1350 } }'::jsonb,
+  '{}'::jsonb,
+  '{ "temperature": 0.8 }'::jsonb,
+  '["conversation", "confidence"]'::jsonb, true
 );

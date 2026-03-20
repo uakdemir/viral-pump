@@ -109,10 +109,12 @@ export class InstagramApiPostingStrategy implements PostingStrategy {
 
     logger.info({ postId: publishData.id }, '[Instagram] Post published');
 
+    // Note: publishData.id is the IG media ID, not the public shortcode/permalink.
+    // Fetching the permalink requires an extra API call (GET /{media-id}?fields=permalink).
+    // For now, leave url undefined rather than guessing a wrong URL.
     return {
       platformPostId: publishData.id,
       postedAt: new Date(),
-      url: `https://www.instagram.com/p/${publishData.id}`,
     };
   }
 }
