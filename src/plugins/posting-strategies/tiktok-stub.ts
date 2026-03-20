@@ -20,6 +20,15 @@ export class TikTokStubPostingStrategy implements PostingStrategy {
     if (input.media.mimeType !== 'video/mp4') {
       throw new Error(`TikTok requires mimeType === 'video/mp4' (got ${input.media.mimeType})`);
     }
+
+    // 9:16 aspect ratio check
+    if (input.media.width && input.media.height) {
+      const ratio = input.media.width / input.media.height;
+      const expected = 9 / 16;
+      if (Math.abs(ratio - expected) / expected > 0.05) {
+        throw new Error(`TikTok requires 9:16 aspect ratio (got ${ratio.toFixed(2)})`);
+      }
+    }
   }
 
   async post(_input: PostInput): Promise<PostResult> {

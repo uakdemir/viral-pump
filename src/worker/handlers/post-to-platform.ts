@@ -52,7 +52,19 @@ export async function handlePostToPlatform(job: Job, deps: PostToPlatformDeps): 
     ...(accountCreds as Record<string, unknown>),
     ...(accountConfig as Record<string, unknown>),
   };
-  const postingStrategy = deps.postingStrategyRegistry.resolve(strategyName, strategyConfig);
+
+  // Resolve strategy — unknown/misspelled strategy names are config errors, not transient failures
+  let postingStrategy: PostingStrategy;
+  try {
+    postingStrategy = deps.postingStrategyRegistry.resolve(strategyName, strategyConfig);
+  } catch (err) {
+    await deps.db.update(posts).set({
+      status: POST_STATUS.FAILED,
+      failureReason: `Unknown posting strategy: ${strategyName}. Check accounts.config.postingStrategy.`,
+    }).where(eq(posts.id, postId));
+    deps.logger.warn({ postId, strategyName }, 'Unknown posting strategy — config error, no retry');
+    return;
+  }
 
   // Step 2: Build PostInput
   const text = item.finalText ?? item.generatedText ?? '';

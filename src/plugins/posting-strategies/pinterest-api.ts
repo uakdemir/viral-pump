@@ -35,6 +35,10 @@ export class PinterestApiPostingStrategy implements PostingStrategy {
     if (input.media.fileSizeBytes && input.media.fileSizeBytes > MAX_FILE_SIZE_BYTES) {
       throw new Error(`Media file size exceeds 20 MB limit (got ${input.media.fileSizeBytes} bytes)`);
     }
+
+    if (input.media.width && input.media.width < 600) {
+      throw new Error(`Pinterest requires image width >= 600px (got ${input.media.width}px)`);
+    }
   }
 
   async post(input: PostInput): Promise<PostResult> {
@@ -43,6 +47,9 @@ export class PinterestApiPostingStrategy implements PostingStrategy {
     }
 
     const boardId = input.platformMeta!.boardId as string;
+    // NOTE: Pinterest API requires a publicly reachable URL for media_source.url.
+    // In production, AssetStore must provide a public URL (S3/R2/CDN), not a local path.
+    // In dry-run mode, this code is never reached.
     const imageUrl = input.media!.path;
 
     logger.info({ boardId }, '[Pinterest] Creating Pin');

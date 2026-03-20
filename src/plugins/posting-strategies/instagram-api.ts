@@ -34,6 +34,16 @@ export class InstagramApiPostingStrategy implements PostingStrategy {
     if (input.media.fileSizeBytes && input.media.fileSizeBytes > MAX_FILE_SIZE_BYTES) {
       throw new Error(`Media file size exceeds 8 MB limit (got ${input.media.fileSizeBytes} bytes)`);
     }
+
+    // Aspect ratio check: Instagram accepts 1:1, 4:5, 16:9 (tolerance ±5%)
+    if (input.media.width && input.media.height) {
+      const ratio = input.media.width / input.media.height;
+      const validRatios = [1, 4 / 5, 16 / 9];
+      const isValid = validRatios.some(r => Math.abs(ratio - r) / r < 0.05);
+      if (!isValid) {
+        throw new Error(`Instagram requires 1:1, 4:5, or 16:9 aspect ratio (got ${ratio.toFixed(2)})`);
+      }
+    }
   }
 
   async post(input: PostInput): Promise<PostResult> {
@@ -41,6 +51,9 @@ export class InstagramApiPostingStrategy implements PostingStrategy {
       throw new Error('Instagram credentials not configured');
     }
 
+    // NOTE: Instagram Graph API requires a publicly reachable URL for image_url.
+    // In production, AssetStore must provide a public URL (S3/R2/CDN), not a local path.
+    // In dry-run mode, this code is never reached (handler skips post() for dryRun accounts).
     const imageUrl = input.media!.path;
 
     // Step 1: Create media container
