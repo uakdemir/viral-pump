@@ -28,6 +28,10 @@ export class TelegramApiPostingStrategy implements PostingStrategy {
       if (input.media.type !== 'image') {
         throw new Error(`Telegram strategy only supports image media (got ${input.media.type})`);
       }
+      const allowedMimes = ['image/jpeg', 'image/png'];
+      if (input.media.mimeType && !allowedMimes.includes(input.media.mimeType)) {
+        throw new Error(`Telegram only accepts JPEG/PNG (got ${input.media.mimeType})`);
+      }
       if (input.media.fileSizeBytes && input.media.fileSizeBytes > MAX_FILE_SIZE_BYTES) {
         throw new Error(`Media file size exceeds 10 MB limit (got ${input.media.fileSizeBytes} bytes)`);
       }

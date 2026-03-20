@@ -1,6 +1,7 @@
 export interface MediaInput {
   type: 'image' | 'video' | 'gif' | 'carousel';
-  path: string;
+  path: string;              // local filesystem path (for file-upload strategies)
+  publicUrl?: string;        // publicly reachable URL (for URL-based platform APIs)
   mimeType: string;
   width?: number;
   height?: number;

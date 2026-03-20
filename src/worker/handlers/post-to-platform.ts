@@ -75,7 +75,8 @@ export async function handlePostToPlatform(job: Job, deps: PostToPlatformDeps): 
     const mm = (item.mediaMeta ?? {}) as Record<string, unknown>;
     media = {
       type: ((mm.mimeType as string) ?? '').startsWith('video/') ? 'video' : 'image',
-      path: deps.assetStore.resolve(item.visualUrl),
+      path: deps.assetStore.resolve(item.visualUrl),       // local path for file-upload strategies (Twitter, Telegram)
+      publicUrl: deps.assetStore.getPublicUrl(item.visualUrl), // public URL for URL-based strategies (Instagram, Pinterest)
       mimeType: (mm.mimeType as string) ?? 'image/png',
       width: mm.width as number | undefined,
       height: mm.height as number | undefined,
@@ -125,6 +126,7 @@ export async function handlePostToPlatform(job: Job, deps: PostToPlatformDeps): 
       postedAt: result.postedAt,
       platformPostId: result.platformPostId,
       url: result.url ?? null,
+      failureReason: null,  // clear any stale failure reason from previous attempts
     }).where(eq(posts.id, postId));
 
     deps.logger.info({

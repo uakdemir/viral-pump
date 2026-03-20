@@ -55,7 +55,13 @@ export function registerPostsRoutes(app: FastifyInstance, db: DB, jobQueue: JobQ
       return reply.status(409).send({ error: 'Only failed posts can be retried' });
     }
 
-    await db.update(posts).set({ status: POST_STATUS.READY }).where(eq(posts.id, id));
+    await db.update(posts).set({
+      status: POST_STATUS.READY,
+      failureReason: null,
+      postedAt: null,
+      platformPostId: null,
+      url: null,
+    }).where(eq(posts.id, id));
     await jobQueue.enqueue(JOB_TYPES.POST_TO_PLATFORM, {
       postId: id,
       contentItemId: post.contentId,

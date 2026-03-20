@@ -31,6 +31,11 @@ export class InstagramApiPostingStrategy implements PostingStrategy {
       throw new Error(`Instagram strategy only supports image media (got ${input.media.type})`);
     }
 
+    const allowedMimes = ['image/jpeg', 'image/png'];
+    if (input.media.mimeType && !allowedMimes.includes(input.media.mimeType)) {
+      throw new Error(`Instagram only accepts JPEG/PNG (got ${input.media.mimeType})`);
+    }
+
     if (input.media.fileSizeBytes && input.media.fileSizeBytes > MAX_FILE_SIZE_BYTES) {
       throw new Error(`Media file size exceeds 8 MB limit (got ${input.media.fileSizeBytes} bytes)`);
     }
@@ -51,10 +56,10 @@ export class InstagramApiPostingStrategy implements PostingStrategy {
       throw new Error('Instagram credentials not configured');
     }
 
-    // NOTE: Instagram Graph API requires a publicly reachable URL for image_url.
-    // In production, AssetStore must provide a public URL (S3/R2/CDN), not a local path.
-    // In dry-run mode, this code is never reached (handler skips post() for dryRun accounts).
-    const imageUrl = input.media!.path;
+    const imageUrl = input.media!.publicUrl ?? input.media!.path;
+    if (!imageUrl.startsWith('http')) {
+      throw new Error('Instagram requires a publicly reachable image URL. Configure AssetStore with a public base URL or use S3/CDN.');
+    }
 
     // Step 1: Create media container
     logger.info({ accountId: this.instagramBusinessAccountId }, '[Instagram] Creating media container');

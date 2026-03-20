@@ -28,6 +28,11 @@ export class PinterestApiPostingStrategy implements PostingStrategy {
       throw new Error(`Pinterest strategy only supports image media (got ${input.media.type})`);
     }
 
+    const allowedMimes = ['image/jpeg', 'image/png'];
+    if (input.media.mimeType && !allowedMimes.includes(input.media.mimeType)) {
+      throw new Error(`Pinterest only accepts JPEG/PNG (got ${input.media.mimeType})`);
+    }
+
     if (!input.platformMeta?.boardId) {
       throw new Error('Pinterest requires platformMeta.boardId');
     }
@@ -47,10 +52,10 @@ export class PinterestApiPostingStrategy implements PostingStrategy {
     }
 
     const boardId = input.platformMeta!.boardId as string;
-    // NOTE: Pinterest API requires a publicly reachable URL for media_source.url.
-    // In production, AssetStore must provide a public URL (S3/R2/CDN), not a local path.
-    // In dry-run mode, this code is never reached.
-    const imageUrl = input.media!.path;
+    const imageUrl = input.media!.publicUrl ?? input.media!.path;
+    if (!imageUrl.startsWith('http')) {
+      throw new Error('Pinterest requires a publicly reachable image URL. Configure AssetStore with a public base URL or use S3/CDN.');
+    }
 
     logger.info({ boardId }, '[Pinterest] Creating Pin');
 

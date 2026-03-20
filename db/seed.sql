@@ -36,19 +36,37 @@ INSERT INTO verticals (id, name, slug, depth, config, status) VALUES (
   'active'
 );
 
--- Accounts (2 accounts for Gold/Forex — EN global + TR local)
+-- Gold/Forex Accounts (multi-platform, dryRun: true)
 INSERT INTO accounts (id, vertical_id, platform, name, language, market, config, status) VALUES
 (
   '00000000-0000-0000-0000-000000000002',
   '00000000-0000-0000-0000-000000000001',
   'twitter', 'Gold Forex EN', 'en', 'global',
-  '{ "postingStrategy": "dry-run" }'::jsonb, 'active'
+  '{ "postingStrategy": "twitter-api", "dryRun": true }'::jsonb, 'active'
 ),
 (
   '00000000-0000-0000-0000-000000000009',
   '00000000-0000-0000-0000-000000000001',
   'twitter', 'Altın Döviz TR', 'tr', 'turkey',
-  '{ "postingStrategy": "dry-run" }'::jsonb, 'active'
+  '{ "postingStrategy": "twitter-api", "dryRun": true }'::jsonb, 'active'
+),
+(
+  '00000000-0000-0000-0000-0000000000a1',
+  '00000000-0000-0000-0000-000000000001',
+  'instagram', 'Gold Forex IG', 'en', 'global',
+  '{ "postingStrategy": "instagram-api", "dryRun": true }'::jsonb, 'active'
+),
+(
+  '00000000-0000-0000-0000-0000000000a2',
+  '00000000-0000-0000-0000-000000000001',
+  'linkedin', 'Gold Forex LinkedIn', 'en', 'global',
+  '{ "postingStrategy": "linkedin-api", "dryRun": true }'::jsonb, 'active'
+),
+(
+  '00000000-0000-0000-0000-0000000000a3',
+  '00000000-0000-0000-0000-000000000001',
+  'telegram', 'Gold Forex Telegram', 'en', 'global',
+  '{ "postingStrategy": "telegram-api", "dryRun": true, "platformMeta": { "channelId": "@goldforex_test" } }'::jsonb, 'active'
 );
 
 -- Data Sources
@@ -166,12 +184,31 @@ INSERT INTO verticals (id, name, slug, depth, config, status) VALUES (
   'active'
 );
 
--- Account
-INSERT INTO accounts (id, vertical_id, platform, name, language, market, config, status) VALUES (
+-- Fitness Accounts (multi-platform, dryRun: true)
+INSERT INTO accounts (id, vertical_id, platform, name, language, market, config, status) VALUES
+(
   '00000000-0000-0000-0000-000000000011',
   '00000000-0000-0000-0000-000000000010',
   'twitter', 'Fitness Daily EN', 'en', 'global',
-  '{ "postingStrategy": "dry-run" }'::jsonb, 'active'
+  '{ "postingStrategy": "twitter-api", "dryRun": true }'::jsonb, 'active'
+),
+(
+  '00000000-0000-0000-0000-0000000000b1',
+  '00000000-0000-0000-0000-000000000010',
+  'instagram', 'Fitness Daily IG', 'en', 'global',
+  '{ "postingStrategy": "instagram-api", "dryRun": true }'::jsonb, 'active'
+),
+(
+  '00000000-0000-0000-0000-0000000000b2',
+  '00000000-0000-0000-0000-000000000010',
+  'pinterest', 'Fitness Tips Pinterest', 'en', 'global',
+  '{ "postingStrategy": "pinterest-api", "dryRun": true, "platformMeta": { "boardId": "fitness-tips-board" } }'::jsonb, 'active'
+),
+(
+  '00000000-0000-0000-0000-0000000000b3',
+  '00000000-0000-0000-0000-000000000010',
+  'newsletter', 'Fitness Weekly Newsletter', 'en', 'global',
+  '{ "postingStrategy": "newsletter", "dryRun": true }'::jsonb, 'active'
 );
 
 -- Trigger Rules (scheduled, cron-based)
@@ -302,13 +339,28 @@ INSERT INTO verticals (id, name, slug, depth, config, status) VALUES (
   'active'
 );
 
--- Account
-INSERT INTO accounts (id, vertical_id, platform, name, language, market, config, status) VALUES (
+-- Dating Accounts (multi-platform, dryRun: true)
+INSERT INTO accounts (id, vertical_id, platform, name, language, market, config, status) VALUES
+(
   '00000000-0000-0000-0000-000000000021',
   '00000000-0000-0000-0000-000000000020',
   'twitter', 'Dating Tips EN', 'en', 'global',
-  '{ "postingStrategy": "dry-run" }'::jsonb, 'active'
+  '{ "postingStrategy": "twitter-api", "dryRun": true }'::jsonb, 'active'
+),
+(
+  '00000000-0000-0000-0000-0000000000c1',
+  '00000000-0000-0000-0000-000000000020',
+  'instagram', 'Dating Tips IG', 'en', 'global',
+  '{ "postingStrategy": "instagram-api", "dryRun": true }'::jsonb, 'active'
+),
+(
+  '00000000-0000-0000-0000-0000000000c2',
+  '00000000-0000-0000-0000-000000000020',
+  'tiktok', 'Dating Tips TikTok', 'en', 'global',
+  '{ "postingStrategy": "tiktok-api", "dryRun": true }'::jsonb, 'active'
 );
+-- Note: Dating TikTok account is inert until video generation pipeline is implemented.
+-- COMPATIBLE_PLATFORMS excludes tiktok from image-content routing.
 
 -- Trigger Rules (scheduled, cron-based)
 INSERT INTO trigger_rules (id, vertical_id, name, condition, content_config, fire_mode, schedule, cooldown_ms, lookback_window_ms, enabled) VALUES
