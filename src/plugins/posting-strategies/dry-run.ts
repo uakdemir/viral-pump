@@ -15,6 +15,8 @@ export class DryRunPostingStrategy implements PostingStrategy {
     this.outputDir = config.outputDir ?? './assets/dry-run';
   }
 
+  validateInput(_input: PostInput): void {}
+
   async post(input: PostInput): Promise<PostResult> {
     await mkdir(this.outputDir, { recursive: true });
 
@@ -25,7 +27,7 @@ export class DryRunPostingStrategy implements PostingStrategy {
       fakePostId: fakeId,
       postedAt: postedAt.toISOString(),
       text: input.text,
-      imagePath: input.imagePath ?? null,
+      media: input.media ?? null,
       charCount: input.text.length,
     };
 
@@ -35,9 +37,9 @@ export class DryRunPostingStrategy implements PostingStrategy {
     logger.info({
       fakePostId: fakeId,
       charCount: input.text.length,
-      hasImage: !!input.imagePath,
+      hasMedia: !!input.media,
       savedTo: filepath,
-    }, '[DRY-RUN] Would have posted to Twitter');
+    }, '[DRY-RUN] Would have posted');
 
     return {
       platformPostId: fakeId,

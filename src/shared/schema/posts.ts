@@ -10,6 +10,8 @@ export const posts = pgTable('posts', {
   status: text('status').notNull().default('ready'),
   postedAt: timestamp('posted_at', { withTimezone: true }),
   platformPostId: text('platform_post_id'),
+  url: text('url'),
+  failureReason: text('failure_reason'),
   metrics: jsonb('metrics').notNull().default({}),
   cost: jsonb('cost').notNull().default({}),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

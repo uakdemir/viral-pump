@@ -22,7 +22,7 @@
 **Date:** 2026-03-17
 **Status:** Accepted
 
-**Context:** All major components (data sources, LLM, visual gen, posting, job queue) must be pluggable per vertical. Considered tsyringe, InversifyJS, and no-framework approaches.
+**Context:** All major components (data sources, LLM, visual gen, posting, job queue, trigger evaluators) must be pluggable per vertical. Considered tsyringe, InversifyJS, and no-framework approaches.
 
 **Decision:** Simple factory/registry pattern — `Record<string, Factory>` maps resolved by name from vertical config JSONB. No DI framework.
 
@@ -31,6 +31,7 @@
 - Manual wiring of dependencies (acceptable for wide-but-shallow dependency graph)
 - No automatic lifecycle management (singleton/transient) — managed explicitly
 - Easy for any developer to understand without framework knowledge
+- Used for all plugin types: DataSourceProvider, ContentGenerator, VisualGenerator, PostingStrategy, TriggerEvaluator, JobQueue, AssetStore
 
 ---
 
@@ -68,21 +69,21 @@
 
 ---
 
-## ADR-005: Automated Posting via Twitter/X API (Pay-Per-Use)
+## ADR-005: Automated Posting via Platform APIs
 
-**Date:** 2026-03-17 (revised)
+**Date:** 2026-03-17 (revised 2026-03-19)
 **Status:** Accepted
 
-**Context:** As of January 2026, X moved to pay-per-use API pricing. Posting a tweet costs ~cents, not the $100/month fixed tier that existed previously. At MVP volume (~50 posts/day), API costs are negligible.
+**Context:** As of January 2026, X moved to pay-per-use API pricing (~cents per post). SP#4 expands posting from Twitter-only to 10 platforms: Twitter/X, Instagram, LinkedIn, Pinterest, Telegram, Newsletter, TikTok, YouTube, Reddit, Blog.
 
-**Decision:** Automated posting to Twitter/X via API from day one. On content approval, a `post-to-platform` job is enqueued and the worker posts via the Twitter API. Posting strategy remains pluggable — manual-assisted fallback exists in the `PostingStrategy` interface but is not built for day 1.
+**Decision:** Automated posting via platform APIs from day one. Each platform is a `PostingStrategy` plugin resolved per account from `accounts.config.postingStrategy`. Platforms requiring video (TikTok, YouTube) or long-form content (Reddit, Blog) ship as stubs until those content formats are built. All platforms support dry-run mode for testing.
 
 **Consequences:**
-- Fully automated end-to-end pipeline (detect → generate → review → post)
-- Negligible API cost (~cents per post)
-- Requires Twitter/X API credentials (OAuth) configured per account
-- Programmatic access to tweet IDs for future metrics collection (Sub-project #2)
-- If X changes pricing or rate-limits aggressively, can swap to manual-assisted fallback
+- Fully automated end-to-end pipeline across 10 platforms
+- Per-platform input validation catches configuration errors before posting
+- Platform-aware routing: `content_templates.platform` field filters which accounts receive posts
+- Stubs for video/long-form platforms prevent premature integration before content pipeline supports those formats
+- In-house per-platform plugins (~100-200 lines each) chosen over Postiz — lower cost, simpler ops, no external dependency
 
 ---
 
@@ -110,7 +111,7 @@
 
 **Context:** Developer preference — user wants to manage their own PostgreSQL instance and provide connection config via environment variables.
 
-**Decision:** Postgres is NOT in Docker Compose. App reads `DATABASE_URL` (or `PGHOST`/`PGPORT`/`PGDATABASE`/`PGUSER`/`PGPASSWORD`) from environment. Docker Compose runs only `web` and `worker`.
+**Decision:** Postgres is NOT in Docker Compose. App reads `VIRAL_DATABASE_URL` from environment. Docker Compose runs only `web` and `worker`.
 
 **Consequences:**
 - Developer has full control over Postgres configuration and version
@@ -119,16 +120,105 @@
 
 ---
 
-## ADR-008: Static PNG Only for MVP Visual Generation
+## ADR-008: Pluggable HTML Visual Templates from Filesystem
 
-**Date:** 2026-03-17
+**Date:** 2026-03-17 (revised 2026-03-18)
 **Status:** Accepted
 
-**Context:** Original vision included GIF animations. Puppeteer can generate both PNG screenshots and multi-frame GIFs, but GIF adds complexity (frame capture, encoding, file size management).
+**Context:** Original MVP had a hardcoded `renderPriceCard()` method. Multi-vertical support requires different visual styles per vertical (price cards, tip cards, quote cards, stat cards).
 
-**Decision:** MVP generates static PNG cards only. GIF animation is explicitly deferred to a future design decision.
+**Decision:** HTML templates stored in `templates/visuals/` directory, loaded by name from `content_templates.visualTemplate.template` field. Templates use `{{placeholder}}` syntax filled by shared `fillHtmlTemplate()` with HTML escaping. Adding a new visual = dropping an HTML file, no code change.
 
 **Consequences:**
-- Simpler implementation — single Puppeteer screenshot per content item
-- May limit visual engagement compared to animated content
-- Future GIF support requires its own design decision (frame count, encoding lib, etc.)
+- Version controlled, easy to design, AI-coding-agent friendly
+- Zero cost per image (Puppeteer screenshots, no API call)
+- HTML escaping prevents broken rendering from LLM output containing `<`, `>`, `&`
+- CSS dimensions hardcoded in templates (must match `visualTemplate.config` — documented constraint)
+- Future optimization: replace Puppeteer with Satori for 5x speed improvement (see backlog)
+
+---
+
+## ADR-009: Generic DetectedEvent with Pluggable Trigger Evaluation
+
+**Date:** 2026-03-18
+**Status:** Accepted
+
+**Context:** SP#1's `DetectedEvent` had financial-specific fields (price, changePct, instrument). Non-financial verticals (Fitness, Dating) need different event shapes. Trigger evaluation needed compound predicates and per-vertical customization.
+
+**Decision:** Generic `DetectedEvent` with `data: Record<string, unknown>` for all vertical-specific fields. `TriggerEvaluator` interface with `DefaultTriggerEvaluator` supporting compound predicates (AND/OR), multiple fire modes (`threshold_cross`, `stateful_true`, `every_poll`, `scheduled`), and per-vertical override via registry.
+
+**Consequences:**
+- Any data shape works — financial, fitness, dating, or custom
+- Compound predicates enable complex rules ("price > 70000 AND changePct > 1%")
+- `threshold_cross` tracks state transitions via `lastPredicateResult` column
+- Vertical-specific evaluators can be added without modifying the default
+- `content_config` on trigger rules explicitly maps to template names — no fallback to "all templates"
+
+---
+
+## ADR-010: Cron-based Scheduled Triggers
+
+**Date:** 2026-03-18
+**Status:** Accepted
+
+**Context:** Content-first verticals (Fitness, Dating) don't rely on real-time API events. They need time-based content generation ("post a workout tip every day at 8AM").
+
+**Decision:** `fire_mode: 'scheduled'` with cron expressions in `trigger_rules.schedule`. Worker runs a 60-second cron check loop using `cron-parser`. Claims are transactional (`FOR UPDATE SKIP LOCKED` + job insert + schedule advance in one DB transaction). Missed firings are skipped on restart (no catch-up).
+
+**Consequences:**
+- Schedule-driven verticals work without any data source polling
+- Durable: `next_scheduled_at` persisted in DB, survives worker restarts
+- Concurrency-safe: transactional claim prevents duplicate firings
+- Invalid cron expressions propagate errors (transaction rolls back, no infinite re-firing)
+
+---
+
+## ADR-011: AI-Assigned Content Tags
+
+**Date:** 2026-03-18
+**Status:** Accepted
+
+**Context:** The learning engine (SP#5) needs to correlate content attributes with performance. Template-level categorization is too coarse — individual generated content items vary in theme even within the same template.
+
+**Decision:** LLM generates tags alongside text using a `Tweet: ... Tags: ...` response format. Tags are parsed by shared `parseLlmResponse()`, validated against the vertical's `tagVocabulary`, and stored in `content_items.tags` JSONB.
+
+**Consequences:**
+- Per-item tagging enables fine-grained learning ("motivation posts get 3x engagement in Fitness")
+- Tag vocabulary is per-vertical (configurable in `verticals.config.defaults.tagVocabulary`)
+- Graceful degradation: if LLM doesn't follow format, content is stored untagged
+- Multi-line tag parsing supported (comma and newline delimiters)
+
+---
+
+## ADR-012: Centralized Constants over Magic Strings
+
+**Date:** 2026-03-19
+**Status:** Accepted
+
+**Context:** Fire modes, generation statuses, review statuses, job types, and template selection modes were scattered as string literals across 15+ files. Any typo or inconsistency would be a silent bug.
+
+**Decision:** All domain constants centralized in `src/shared/constants.ts` and imported throughout. Fire modes, statuses, job types, and template selection use typed `as const` objects.
+
+**Consequences:**
+- Single source of truth for all status strings
+- TypeScript catches typos at compile time
+- Easy to add new statuses/modes in one place
+- Raw SQL queries (job queue, scheduler) still use string literals (unavoidable)
+
+---
+
+## ADR-013: In-House Multi-Platform Posting over Postiz
+
+**Date:** 2026-03-19
+**Status:** Accepted
+
+**Context:** Evaluated Postiz (open-source, 17+ platforms) vs building per-platform `PostingStrategy` plugins in-house. Postiz cloud costs $29+/month with 400 post limit. Postiz self-hosted requires Temporal (operational complexity).
+
+**Decision:** Build in-house. Each platform is a `PostingStrategy` plugin (~100-200 lines). The `PostInput` interface includes media metadata (type, dimensions, MIME, duration) and `platformMeta` for platform-specific fields. Each plugin validates inputs against platform constraints before posting.
+
+**Consequences:**
+- Zero external dependency for posting
+- Each plugin is self-contained and independently testable
+- Per-platform validation catches configuration errors before API calls
+- Platforms requiring video (TikTok, YouTube) or long-form content (Reddit, Blog) ship as stubs
+- Adding a new platform is a single file addition + registry registration

@@ -10,6 +10,7 @@ export const contentTemplates = pgTable('content_templates', {
   platform: text('platform'),
   promptTemplate: text('prompt_template').notNull(),
   visualTemplate: jsonb('visual_template').notNull().default({}),
+  platformMeta: jsonb('platform_meta').notNull().default({}),
   generationConfig: jsonb('generation_config').notNull().default({}),
   tags: jsonb('tags').notNull().default([]),
   enabled: boolean('enabled').notNull().default(true),

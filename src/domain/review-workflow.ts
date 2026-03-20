@@ -1,25 +1,74 @@
 import { eq, and } from 'drizzle-orm';
 import { contentItems } from '../shared/schema/content-items.js';
+import { contentTemplates } from '../shared/schema/content-templates.js';
 import { posts } from '../shared/schema/posts.js';
 import { accounts } from '../shared/schema/accounts.js';
-import { REVIEW_STATUS, POST_STATUS, JOB_TYPES } from '../shared/constants.js';
+import { REVIEW_STATUS, JOB_TYPES } from '../shared/constants.js';
+import { getContentMediaType, isCompatible, type MediaType } from '../shared/platform-compatibility.js';
+import { logger as defaultLogger } from '../shared/logger.js';
 import type { DB } from '../shared/db.js';
 import type { JobQueue } from '../plugins/job-queue/types.js';
 
 /**
- * Shared: create post rows for all active accounts in the vertical and enqueue posting jobs.
+ * Pure function: filter accounts by platform compatibility.
+ * Exported for testing.
+ */
+export function filterAccountsByCompatibility(
+  activeAccounts: Array<{ platform: string; [key: string]: unknown }>,
+  templatePlatform: string | null,
+  contentMediaType: MediaType,
+): Array<{ platform: string; [key: string]: unknown }> {
+  if (templatePlatform) {
+    return activeAccounts.filter(a => a.platform === templatePlatform);
+  }
+  // NULL platform — filter by content compatibility
+  return activeAccounts.filter(a => isCompatible(a.platform, contentMediaType));
+}
+
+/**
+ * Shared: create post rows for compatible accounts and enqueue posting jobs.
+ * Platform-aware routing: template.platform filters explicitly, NULL uses COMPATIBLE_PLATFORMS.
  */
 async function createPostsForContent(
   db: DB, jobQueue: JobQueue, contentItemId: string, verticalId: string,
+  log: typeof defaultLogger = defaultLogger,
 ): Promise<void> {
-  const activeAccounts = await db.select()
+  // Get content item and template for routing
+  const [contentItem] = await db.select().from(contentItems)
+    .where(eq(contentItems.id, contentItemId));
+
+  const [template] = contentItem?.templateId
+    ? await db.select().from(contentTemplates).where(eq(contentTemplates.id, contentItem.templateId))
+    : [null];
+
+  // Get all active accounts for this vertical
+  const allActiveAccounts = await db.select()
     .from(accounts)
     .where(and(
       eq(accounts.verticalId, verticalId),
       eq(accounts.status, 'active'),
     ));
 
-  for (const account of activeAccounts) {
+  // Filter by platform compatibility
+  const mediaType = getContentMediaType(contentItem?.visualUrl ?? null);
+  const targetAccounts = filterAccountsByCompatibility(
+    allActiveAccounts,
+    template?.platform ?? null,
+    mediaType,
+  );
+
+  // Zero-match: warn and return — no post rows created
+  if (targetAccounts.length === 0) {
+    log.warn({
+      contentItemId,
+      templateName: template?.name,
+      templatePlatform: template?.platform,
+      mediaType,
+    }, 'No matching active accounts — approval succeeded but no posts created');
+    return;
+  }
+
+  for (const account of targetAccounts as Array<{ id: string; platform: string }>) {
     const inserted = await db.insert(posts)
       .values({ contentId: contentItemId, accountId: account.id })
       .onConflictDoNothing()

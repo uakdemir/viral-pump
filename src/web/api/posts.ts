@@ -19,6 +19,8 @@ export function registerPostsRoutes(app: FastifyInstance, db: DB, jobQueue: JobQ
       status: posts.status,
       postedAt: posts.postedAt,
       platformPostId: posts.platformPostId,
+      url: posts.url,
+      failureReason: posts.failureReason,
       metrics: posts.metrics,
       createdAt: posts.createdAt,
       generatedText: contentItems.generatedText,

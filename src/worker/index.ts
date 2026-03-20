@@ -7,6 +7,15 @@ import { PuppeteerHtmlVisualGenerator } from '../plugins/visual-generators/puppe
 import { LocalVolumeAssetStore } from '../plugins/asset-store/local-volume.js';
 import { TwitterApiPostingStrategy } from '../plugins/posting-strategies/twitter-api.js';
 import { DryRunPostingStrategy } from '../plugins/posting-strategies/dry-run.js';
+import { InstagramApiPostingStrategy } from '../plugins/posting-strategies/instagram-api.js';
+import { LinkedInApiPostingStrategy } from '../plugins/posting-strategies/linkedin-api.js';
+import { PinterestApiPostingStrategy } from '../plugins/posting-strategies/pinterest-api.js';
+import { TelegramApiPostingStrategy } from '../plugins/posting-strategies/telegram-api.js';
+import { NewsletterStubPostingStrategy } from '../plugins/posting-strategies/newsletter-stub.js';
+import { TikTokStubPostingStrategy } from '../plugins/posting-strategies/tiktok-stub.js';
+import { YouTubeStubPostingStrategy } from '../plugins/posting-strategies/youtube-stub.js';
+import { RedditStubPostingStrategy } from '../plugins/posting-strategies/reddit-stub.js';
+import { BlogStubPostingStrategy } from '../plugins/posting-strategies/blog-stub.js';
 import { ClaudeContentGenerator } from '../plugins/content-generators/claude.js';
 import { OpenAIContentGenerator } from '../plugins/content-generators/openai.js';
 import { createRegistry } from '../plugins/registry.js';
@@ -39,19 +48,19 @@ if (config.OPENAI_API_KEY) {
   );
 }
 
-// Posting strategy registry — app-level keys from env, per-account tokens from DB
+// Posting strategy registry — each strategy gets full merged config, picks what it needs
 const postingStrategyRegistry = createRegistry<PostingStrategy>();
-postingStrategyRegistry.register('twitter-api', (cfg) =>
-  new TwitterApiPostingStrategy({
-    apiKey: cfg.apiKey,
-    apiSecret: cfg.apiSecret,
-    accessToken: cfg.accessToken,
-    accessTokenSecret: cfg.accessTokenSecret,
-  })
-);
-postingStrategyRegistry.register('dry-run', (cfg) =>
-  new DryRunPostingStrategy({ outputDir: cfg.outputDir ?? './assets/dry-run' })
-);
+postingStrategyRegistry.register('twitter-api', (cfg) => new TwitterApiPostingStrategy(cfg));
+postingStrategyRegistry.register('instagram-api', (cfg) => new InstagramApiPostingStrategy(cfg));
+postingStrategyRegistry.register('linkedin-api', (cfg) => new LinkedInApiPostingStrategy(cfg));
+postingStrategyRegistry.register('pinterest-api', (cfg) => new PinterestApiPostingStrategy(cfg));
+postingStrategyRegistry.register('telegram-api', (cfg) => new TelegramApiPostingStrategy(cfg));
+postingStrategyRegistry.register('newsletter', (cfg) => new NewsletterStubPostingStrategy(cfg));
+postingStrategyRegistry.register('tiktok-api', (cfg) => new TikTokStubPostingStrategy(cfg));
+postingStrategyRegistry.register('youtube-api', (cfg) => new YouTubeStubPostingStrategy(cfg));
+postingStrategyRegistry.register('reddit-api', (cfg) => new RedditStubPostingStrategy(cfg));
+postingStrategyRegistry.register('blog', (cfg) => new BlogStubPostingStrategy(cfg));
+postingStrategyRegistry.register('dry-run', (cfg) => new DryRunPostingStrategy({ outputDir: cfg.outputDir ?? config.ASSET_DIR + '/dry-run' }));
 
 const appCredentials = {
   apiKey: config.TWITTER_API_KEY ?? '',
@@ -108,7 +117,7 @@ async function processJobs(): Promise<void> {
             await handleGenerateVisual(job, { db, visualGenerator, assetStore, logger });
             break;
           case JOB_TYPES.POST_TO_PLATFORM:
-            await handlePostToPlatform(job, { db, postingStrategyRegistry, appCredentials, assetStore, logger });
+            await handlePostToPlatform(job, { db, postingStrategyRegistry, appCredentials, assetStore, assetDir: config.ASSET_DIR, logger });
             break;
           default:
             logger.warn({ type: job.type }, 'Unknown job type');

@@ -10,6 +10,7 @@ export const contentItems = pgTable('content_items', {
   eventData: jsonb('event_data').notNull().default({}),
   generatedText: text('generated_text'),
   visualUrl: text('visual_url'),
+  mediaMeta: jsonb('media_meta').notNull().default({}),
   generationStatus: text('generation_status').notNull().default('generating'),
   reviewStatus: text('review_status').notNull().default('draft'),
   finalText: text('final_text'),

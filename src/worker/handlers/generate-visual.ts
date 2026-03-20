@@ -29,9 +29,20 @@ export async function handleGenerateVisual(job: Job, deps: GenerateVisualDeps): 
 
     const visualUrl = await deps.assetStore.store(contentItemId, buffer, 'png');
 
+    // Persist media metadata for downstream platform validation
+    const width = (templateConfig?.config as any)?.width ?? 1200;
+    const height = (templateConfig?.config as any)?.height ?? 628;
+    const mediaMeta = {
+      mimeType: 'image/png',
+      width,
+      height,
+      fileSizeBytes: buffer.length,
+    };
+
     await deps.db.update(contentItems)
       .set({
         visualUrl,
+        mediaMeta,
         generationStatus: GENERATION_STATUS.READY,
         reviewStatus: REVIEW_STATUS.PENDING,
       })
