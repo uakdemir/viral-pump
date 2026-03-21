@@ -67,7 +67,7 @@ interface MetricsCollector {
 
 | Platform | Implementation | Status |
 |---|---|---|
-| Twitter/X | `TwitterMetricsCollector` | Full — uses `GET /2/tweets/:id` with `tweet.fields=public_metrics` |
+| Twitter/X | `TwitterMetricsCollector` | Partial — bearer token + `public_metrics` gives likes, shares, comments, saves. **Views (impression_count) requires OAuth user context** — not available via bearer token. Backlog: switch to per-account OAuth for full metrics. |
 | Instagram | `InstagramMetricsCollector` | Full — uses `GET /{media-id}/insights` + `GET /{media-id}?fields=like_count,comments_count` |
 | Others | Not registered | Silently skipped by poller (checked via `registry.names()` before `resolve()`) |
 

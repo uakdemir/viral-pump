@@ -51,6 +51,13 @@ Items move from here into sub-project specs when ready to implement.
 
 ---
 
+### Twitter metrics: switch to OAuth for views (impression_count)
+**Priority:** Medium
+**Context:** Bearer token only provides `public_metrics` (likes, shares, comments, saves). Views (`impression_count`) requires `non_public_metrics` which needs OAuth 1.0a user context. Current implementation returns views as undefined for Twitter posts. To fix: use per-account access tokens (already in DB) instead of bearer token for metrics collection, or use both (bearer for public, OAuth for non-public).
+**Decided:** 2026-03-21 (code review finding)
+
+---
+
 ## Operations & Automation
 
 ### Instagram token auto-refresh cron

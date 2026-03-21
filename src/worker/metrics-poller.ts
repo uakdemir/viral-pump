@@ -2,7 +2,7 @@ import { eq, and, sql } from 'drizzle-orm';
 import { posts } from '../shared/schema/posts.js';
 import { accounts } from '../shared/schema/accounts.js';
 import { metricsSnapshots } from '../shared/schema/metrics-snapshots.js';
-import { shouldPoll, PLATFORM_HOURLY_BUDGETS } from '../shared/metrics-schedules.js';
+import { shouldPoll, PLATFORM_HOURLY_BUDGETS, METRICS_SCHEDULES } from '../shared/metrics-schedules.js';
 import type { DB } from '../shared/db.js';
 import type { MetricsCollector } from '../plugins/metrics-collectors/types.js';
 import type { PluginRegistry } from '../plugins/registry.js';
@@ -84,6 +84,10 @@ export class MetricsPoller {
     let errors = 0;
     const platformsRateLimited = new Set<string>();
 
+    // Compute the global max age across all platforms so we can exclude definitely-expired rows in SQL
+    const globalMaxAgeMs = Math.max(...Object.values(METRICS_SCHEDULES).map(s => s.maxAgeMs));
+    const oldestEligible = new Date(now - globalMaxAgeMs).toISOString();
+
     // Query eligible posts — push filters into SQL to avoid scanning historical rows
     const eligiblePosts = await this.deps.db
       .select({
@@ -103,6 +107,7 @@ export class MetricsPoller {
         eq(posts.metricsDisabled, false),
         sql`${posts.platformPostId} IS NOT NULL`,
         sql`${posts.platformPostId} NOT LIKE 'dry-run-%'`,
+        sql`${posts.postedAt} >= ${oldestEligible}::timestamptz`,
       ))
       .orderBy(sql`${posts.postedAt} DESC`);
 
