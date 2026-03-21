@@ -35,7 +35,9 @@ describe('parseLlmResponse', () => {
   });
 
   it('uses last Tags: marker when multiple exist', () => {
-    const { text, tags } = parseLlmResponse('Avoid these tags: red-flag\nTweet: Real tweet\nTags: humor');
+    const { text, tags } = parseLlmResponse(
+      'Avoid these tags: red-flag\nTweet: Real tweet\nTags: humor',
+    );
     expect(text).toBe('Avoid these tags: red-flag\nTweet: Real tweet');
     // Wait — lastIndexOf picks the last Tags:, so text is everything before it
     // Actually: "Avoid these tags: red-flag\nTweet: Real tweet" contains "Tweet:" so it gets stripped
@@ -50,7 +52,9 @@ describe('parseLlmResponse', () => {
   });
 
   it('trims whitespace from text and tags', () => {
-    const { text, tags } = parseLlmResponse('  Tweet:   Gold is up  \n  Tags:   urgent ,  data-driven  ');
+    const { text, tags } = parseLlmResponse(
+      '  Tweet:   Gold is up  \n  Tags:   urgent ,  data-driven  ',
+    );
     expect(text).toBe('Gold is up');
     expect(tags).toEqual(['urgent', 'data-driven']);
   });

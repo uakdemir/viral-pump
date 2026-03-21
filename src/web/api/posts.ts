@@ -10,7 +10,7 @@ import type { JobQueue } from '../../plugins/job-queue/types.js';
 
 export function registerPostsRoutes(app: FastifyInstance, db: DB, jobQueue: JobQueue) {
   // GET /api/posts?status=&platform=&vertical=&since=&until=&summary=true
-  app.get('/api/posts', async (request) => {
+  app.get('/api/posts', async request => {
     const { status, platform, vertical, since, until, summary } = request.query as {
       status?: string;
       platform?: string;
@@ -31,25 +31,26 @@ export function registerPostsRoutes(app: FastifyInstance, db: DB, jobQueue: JobQ
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
     // Main query — paginated items
-    let query = db.select({
-      id: posts.id,
-      contentId: posts.contentId,
-      accountId: posts.accountId,
-      status: posts.status,
-      postedAt: posts.postedAt,
-      platformPostId: posts.platformPostId,
-      url: posts.url,
-      failureReason: posts.failureReason,
-      metrics: posts.metrics,
-      createdAt: posts.createdAt,
-      generatedText: contentItems.generatedText,
-      finalText: contentItems.finalText,
-      visualUrl: contentItems.visualUrl,
-      templateId: contentItems.templateId,
-      accountName: accounts.name,
-      platform: accounts.platform,
-      language: accounts.language,
-    })
+    let query = db
+      .select({
+        id: posts.id,
+        contentId: posts.contentId,
+        accountId: posts.accountId,
+        status: posts.status,
+        postedAt: posts.postedAt,
+        platformPostId: posts.platformPostId,
+        url: posts.url,
+        failureReason: posts.failureReason,
+        metrics: posts.metrics,
+        createdAt: posts.createdAt,
+        generatedText: contentItems.generatedText,
+        finalText: contentItems.finalText,
+        visualUrl: contentItems.visualUrl,
+        templateId: contentItems.templateId,
+        accountName: accounts.name,
+        platform: accounts.platform,
+        language: accounts.language,
+      })
       .from(posts)
       .leftJoin(contentItems, eq(posts.contentId, contentItems.id))
       .leftJoin(accounts, eq(posts.accountId, accounts.id))
@@ -113,13 +114,16 @@ export function registerPostsRoutes(app: FastifyInstance, db: DB, jobQueue: JobQ
       return reply.status(409).send({ error: 'Only failed posts can be retried' });
     }
 
-    await db.update(posts).set({
-      status: POST_STATUS.READY,
-      failureReason: null,
-      postedAt: null,
-      platformPostId: null,
-      url: null,
-    }).where(eq(posts.id, id));
+    await db
+      .update(posts)
+      .set({
+        status: POST_STATUS.READY,
+        failureReason: null,
+        postedAt: null,
+        platformPostId: null,
+        url: null,
+      })
+      .where(eq(posts.id, id));
     await jobQueue.enqueue(JOB_TYPES.POST_TO_PLATFORM, {
       postId: id,
       contentItemId: post.contentId,

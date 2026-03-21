@@ -6,16 +6,23 @@ import type { Job, JobQueue } from './types.js';
 export class PostgresJobQueue implements JobQueue {
   constructor(private db: DB) {}
 
-  async enqueue(type: string, payload: Record<string, unknown>, options?: {
-    scheduledAt?: Date;
-    maxAttempts?: number;
-  }): Promise<string> {
-    const [row] = await this.db.insert(jobQueue).values({
-      type,
-      payload,
-      scheduledAt: options?.scheduledAt ?? new Date(),
-      maxAttempts: options?.maxAttempts ?? 3,
-    }).returning({ id: jobQueue.id });
+  async enqueue(
+    type: string,
+    payload: Record<string, unknown>,
+    options?: {
+      scheduledAt?: Date;
+      maxAttempts?: number;
+    },
+  ): Promise<string> {
+    const [row] = await this.db
+      .insert(jobQueue)
+      .values({
+        type,
+        payload,
+        scheduledAt: options?.scheduledAt ?? new Date(),
+        maxAttempts: options?.maxAttempts ?? 3,
+      })
+      .returning({ id: jobQueue.id });
     return row.id;
   }
 
@@ -53,15 +60,17 @@ export class PostgresJobQueue implements JobQueue {
   }
 
   async complete(jobId: string): Promise<void> {
-    await this.db.update(jobQueue)
+    await this.db
+      .update(jobQueue)
       .set({ status: 'completed', completedAt: new Date() })
       .where(eq(jobQueue.id, jobId));
   }
 
   async fail(jobId: string, error: unknown): Promise<void> {
-    const errorJson = error instanceof Error
-      ? { message: error.message, stack: error.stack }
-      : { message: String(error) };
+    const errorJson =
+      error instanceof Error
+        ? { message: error.message, stack: error.stack }
+        : { message: String(error) };
 
     await this.db.execute(sql`
       UPDATE job_queue
@@ -79,7 +88,8 @@ export class PostgresJobQueue implements JobQueue {
 
   async extendLease(jobId: string, leaseDurationMs: number): Promise<void> {
     const leaseExpires = new Date(Date.now() + leaseDurationMs);
-    await this.db.update(jobQueue)
+    await this.db
+      .update(jobQueue)
       .set({ leaseExpiresAt: leaseExpires })
       .where(eq(jobQueue.id, jobId));
   }

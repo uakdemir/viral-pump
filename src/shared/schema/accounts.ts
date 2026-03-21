@@ -3,7 +3,9 @@ import { verticals } from './verticals.js';
 
 export const accounts = pgTable('accounts', {
   id: uuid('id').defaultRandom().primaryKey(),
-  verticalId: uuid('vertical_id').notNull().references(() => verticals.id),
+  verticalId: uuid('vertical_id')
+    .notNull()
+    .references(() => verticals.id),
   platform: text('platform').notNull(),
   name: text('name').notNull(),
   language: text('language').notNull(),

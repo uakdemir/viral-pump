@@ -32,7 +32,7 @@ export class CoinGeckoProvider implements DataSourceProvider {
         return [];
       }
 
-      const data = await res.json() as Record<string, Record<string, number>>;
+      const data = (await res.json()) as Record<string, Record<string, number>>;
       const events: DetectedEvent[] = [];
       const now = new Date();
 
@@ -43,9 +43,8 @@ export class CoinGeckoProvider implements DataSourceProvider {
 
           const instrument = `${symbol}/${vs.toUpperCase()}`;
           const previousPrice = this.previousPrices.get(instrument) ?? price;
-          const changePct = previousPrice !== 0
-            ? ((price - previousPrice) / previousPrice) * 100
-            : 0;
+          const changePct =
+            previousPrice !== 0 ? ((price - previousPrice) / previousPrice) * 100 : 0;
 
           events.push({
             source: 'coingecko',

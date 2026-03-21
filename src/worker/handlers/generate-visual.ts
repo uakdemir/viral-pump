@@ -39,7 +39,8 @@ export async function handleGenerateVisual(job: Job, deps: GenerateVisualDeps): 
       fileSizeBytes: buffer.length,
     };
 
-    await deps.db.update(contentItems)
+    await deps.db
+      .update(contentItems)
       .set({
         visualUrl,
         mediaMeta,
@@ -50,7 +51,8 @@ export async function handleGenerateVisual(job: Job, deps: GenerateVisualDeps): 
 
     deps.logger.info({ contentItemId, visualUrl }, 'Visual generated, content ready for review');
   } catch (err) {
-    await deps.db.update(contentItems)
+    await deps.db
+      .update(contentItems)
       .set({ generationStatus: GENERATION_STATUS.FAILED })
       .where(eq(contentItems.id, contentItemId));
     throw err;

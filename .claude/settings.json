@@ -1,0 +1,100 @@
+{
+  "model": "opus[1m]",
+  "effortLevel": "high",
+  "enabledPlugins": {
+    "superpowers@claude-plugins-official": true,
+    "context7@claude-plugins-official": true,
+    "code-review@claude-plugins-official": true,
+    "frontend-design@claude-plugins-official": true,
+    "ui-ux-pro-max@ui-ux-pro-max-skill": true
+  },
+  "sandbox": {
+    "enabled": true,
+    "filesystem": {
+      "allowWrite": ["./"]
+    }
+  },
+  "permissions": {
+    "allow": [
+      "Edit",
+      "Write",
+      "Read",
+      "Glob",
+      "Grep",
+      "Task",
+      "WebFetch",
+      "WebSearch",
+      "Bash(npm run *)",
+      "Bash(npm test *)",
+      "Bash(npx *)",
+      "Bash(node *)",
+      "Bash(tsc *)",
+      "Bash(mkdir *)",
+      "Bash(ls *)",
+      "Bash(pwd)",
+      "Bash(wc *)",
+      "Bash(docker-compose up *)",
+      "Bash(docker-compose ps)",
+      "Bash(docker-compose exec *)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git show*)",
+      "Bash(git branch*)",
+      "Bash(git remote*)",
+      "Bash(git add *)",
+      "Bash(psql *)",
+      "Bash(curl *)",
+      "Bash(pkill *)",
+      "Bash(kill *)",
+      "Bash(lsof *)",
+      "mcp__plugin_context7_context7__resolve-library-id",
+      "mcp__plugin_context7_context7__query-docs"
+    ],
+    "deny": [
+      "Bash(git push*)",
+      "Bash(git commit*)",
+      "Bash(git rebase*)",
+      "Bash(git reset*)",
+      "Bash(git checkout*)",
+      "Bash(git merge*)",
+      "Bash(git clean*)",
+      "Bash(git stash*)"
+    ]
+  },
+  "hooks": {
+    "PermissionRequest": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/umut/claude-notify.sh 'Claude Code (WSL) needs your attention'"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npx tsc --noEmit 2>&1 | head -20"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/umut/claude-notify.sh 'Claude Code (WSL) task completed'"
+          }
+        ]
+      }
+    ]
+  }
+}

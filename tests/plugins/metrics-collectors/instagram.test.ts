@@ -6,17 +6,28 @@ describe('InstagramMetricsCollector', () => {
 
   it('collects basic metrics + insights from two API calls', async () => {
     vi.spyOn(globalThis, 'fetch')
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        like_count: 45, comments_count: 7,
-      }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        data: [
-          { name: 'impressions', values: [{ value: 890 }] },
-          { name: 'reach', values: [{ value: 650 }] },
-          { name: 'saved', values: [{ value: 12 }] },
-          { name: 'shares', values: [{ value: 3 }] },
-        ],
-      }), { status: 200 }));
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            like_count: 45,
+            comments_count: 7,
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: [
+              { name: 'impressions', values: [{ value: 890 }] },
+              { name: 'reach', values: [{ value: 650 }] },
+              { name: 'saved', values: [{ value: 12 }] },
+              { name: 'shares', values: [{ value: 3 }] },
+            ],
+          }),
+          { status: 200 },
+        ),
+      );
 
     const collector = new InstagramMetricsCollector();
     const result = await collector.collect('media-123', { accessToken: 'test-token' });
@@ -31,12 +42,23 @@ describe('InstagramMetricsCollector', () => {
 
   it('returns partial data when insights not available (400)', async () => {
     vi.spyOn(globalThis, 'fetch')
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        like_count: 45, comments_count: 7,
-      }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        error: { message: 'Insights are not available', code: 100 }
-      }), { status: 400 }));
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            like_count: 45,
+            comments_count: 7,
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: { message: 'Insights are not available', code: 100 },
+          }),
+          { status: 400 },
+        ),
+      );
 
     const collector = new InstagramMetricsCollector();
     const result = await collector.collect('media-123', { accessToken: 'test-token' });
@@ -51,9 +73,7 @@ describe('InstagramMetricsCollector', () => {
   });
 
   it('throws unrecoverable on 404', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-      new Response('Not Found', { status: 404 }),
-    );
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('Not Found', { status: 404 }));
     const collector = new InstagramMetricsCollector();
     try {
       await collector.collect('bad-id', { accessToken: 'test' });
@@ -64,9 +84,15 @@ describe('InstagramMetricsCollector', () => {
 
   it('throws on 401 auth error', async () => {
     vi.spyOn(globalThis, 'fetch')
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        like_count: 45, comments_count: 7,
-      }), { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            like_count: 45,
+            comments_count: 7,
+          }),
+          { status: 200 },
+        ),
+      )
       .mockResolvedValueOnce(new Response('Unauthorized', { status: 401 }));
 
     const collector = new InstagramMetricsCollector();

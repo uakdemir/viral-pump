@@ -7,7 +7,11 @@ import { POST_STATUS } from '../../shared/constants.js';
 import { DryRunPostingStrategy } from '../../plugins/posting-strategies/dry-run.js';
 import type { DB } from '../../shared/db.js';
 import type { Job } from '../../plugins/job-queue/types.js';
-import type { PostingStrategy, PostInput, MediaInput } from '../../plugins/posting-strategies/types.js';
+import type {
+  PostingStrategy,
+  PostInput,
+  MediaInput,
+} from '../../plugins/posting-strategies/types.js';
 import type { AssetStore } from '../../plugins/asset-store/types.js';
 import type { PluginRegistry } from '../../plugins/registry.js';
 
@@ -17,7 +21,11 @@ interface PostToPlatformDeps {
   appCredentials: { apiKey: string; apiSecret: string };
   assetStore: AssetStore;
   assetDir: string;
-  logger: { info: (...args: any[]) => void; warn: (...args: any[]) => void; error: (...args: any[]) => void };
+  logger: {
+    info: (...args: any[]) => void;
+    warn: (...args: any[]) => void;
+    error: (...args: any[]) => void;
+  };
 }
 
 export async function handlePostToPlatform(job: Job, deps: PostToPlatformDeps): Promise<void> {
@@ -28,12 +36,13 @@ export async function handlePostToPlatform(job: Job, deps: PostToPlatformDeps): 
   };
 
   // Get content item and account
-  const [item] = await deps.db.select().from(contentItems)
+  const [item] = await deps.db
+    .select()
+    .from(contentItems)
     .where(eq(contentItems.id, contentItemId));
   if (!item) throw new Error(`Content item not found: ${contentItemId}`);
 
-  const [account] = await deps.db.select().from(accounts)
-    .where(eq(accounts.id, accountId));
+  const [account] = await deps.db.select().from(accounts).where(eq(accounts.id, accountId));
   if (!account) throw new Error(`Account not found: ${accountId}`);
 
   // Fetch template for platformMeta merge
@@ -58,10 +67,13 @@ export async function handlePostToPlatform(job: Job, deps: PostToPlatformDeps): 
   try {
     postingStrategy = deps.postingStrategyRegistry.resolve(strategyName, strategyConfig);
   } catch (err) {
-    await deps.db.update(posts).set({
-      status: POST_STATUS.FAILED,
-      failureReason: `Unknown posting strategy: ${strategyName}. Check accounts.config.postingStrategy.`,
-    }).where(eq(posts.id, postId));
+    await deps.db
+      .update(posts)
+      .set({
+        status: POST_STATUS.FAILED,
+        failureReason: `Unknown posting strategy: ${strategyName}. Check accounts.config.postingStrategy.`,
+      })
+      .where(eq(posts.id, postId));
     deps.logger.warn({ postId, strategyName }, 'Unknown posting strategy — config error, no retry');
     return;
   }
@@ -75,7 +87,7 @@ export async function handlePostToPlatform(job: Job, deps: PostToPlatformDeps): 
     const mm = (item.mediaMeta ?? {}) as Record<string, unknown>;
     media = {
       type: ((mm.mimeType as string) ?? '').startsWith('video/') ? 'video' : 'image',
-      path: deps.assetStore.resolve(item.visualUrl),       // local path for file-upload strategies (Twitter, Telegram)
+      path: deps.assetStore.resolve(item.visualUrl), // local path for file-upload strategies (Twitter, Telegram)
       publicUrl: deps.assetStore.getPublicUrl(item.visualUrl), // public URL for URL-based strategies (Instagram, Pinterest)
       mimeType: (mm.mimeType as string) ?? 'image/png',
       width: mm.width as number | undefined,
@@ -86,7 +98,7 @@ export async function handlePostToPlatform(job: Job, deps: PostToPlatformDeps): 
 
   // Merge platformMeta: account defaults + template overrides
   const accountMeta = (accountConfig.platformMeta ?? {}) as Record<string, unknown>;
-  const templateMeta = ((template?.platformMeta ?? {}) as Record<string, unknown>);
+  const templateMeta = (template?.platformMeta ?? {}) as Record<string, unknown>;
   const platformMeta = { ...accountMeta, ...templateMeta };
 
   const postInput: PostInput = { text, media, platformMeta };
@@ -95,11 +107,17 @@ export async function handlePostToPlatform(job: Job, deps: PostToPlatformDeps): 
   try {
     postingStrategy.validateInput(postInput);
   } catch (err) {
-    await deps.db.update(posts).set({
-      status: POST_STATUS.FAILED,
-      failureReason: err instanceof Error ? err.message : String(err),
-    }).where(eq(posts.id, postId));
-    deps.logger.warn({ postId, error: (err as Error).message }, 'Post validation failed — config error, no retry');
+    await deps.db
+      .update(posts)
+      .set({
+        status: POST_STATUS.FAILED,
+        failureReason: err instanceof Error ? err.message : String(err),
+      })
+      .where(eq(posts.id, postId));
+    deps.logger.warn(
+      { postId, error: (err as Error).message },
+      'Post validation failed — config error, no retry',
+    );
     return; // don't throw — job completes, no retry
   }
 
@@ -108,12 +126,18 @@ export async function handlePostToPlatform(job: Job, deps: PostToPlatformDeps): 
   if (isDryRun) {
     const dryRunStrategy = new DryRunPostingStrategy({ outputDir: deps.assetDir + '/dry-run' });
     const result = await dryRunStrategy.post(postInput);
-    await deps.db.update(posts).set({
-      status: POST_STATUS.POSTED,
-      postedAt: result.postedAt,
-      platformPostId: result.platformPostId,
-    }).where(eq(posts.id, postId));
-    deps.logger.info({ postId, accountName: account.name, dryRun: true }, 'Dry-run post (validated against real platform)');
+    await deps.db
+      .update(posts)
+      .set({
+        status: POST_STATUS.POSTED,
+        postedAt: result.postedAt,
+        platformPostId: result.platformPostId,
+      })
+      .where(eq(posts.id, postId));
+    deps.logger.info(
+      { postId, accountName: account.name, dryRun: true },
+      'Dry-run post (validated against real platform)',
+    );
     return;
   }
 
@@ -121,25 +145,34 @@ export async function handlePostToPlatform(job: Job, deps: PostToPlatformDeps): 
   try {
     const result = await postingStrategy.post(postInput);
 
-    await deps.db.update(posts).set({
-      status: POST_STATUS.POSTED,
-      postedAt: result.postedAt,
-      platformPostId: result.platformPostId,
-      url: result.url ?? null,
-      failureReason: null,  // clear any stale failure reason from previous attempts
-    }).where(eq(posts.id, postId));
+    await deps.db
+      .update(posts)
+      .set({
+        status: POST_STATUS.POSTED,
+        postedAt: result.postedAt,
+        platformPostId: result.platformPostId,
+        url: result.url ?? null,
+        failureReason: null, // clear any stale failure reason from previous attempts
+      })
+      .where(eq(posts.id, postId));
 
-    deps.logger.info({
-      postId,
-      accountName: account.name,
-      platformPostId: result.platformPostId,
-      url: result.url,
-    }, 'Posted to platform');
+    deps.logger.info(
+      {
+        postId,
+        accountName: account.name,
+        platformPostId: result.platformPostId,
+        url: result.url,
+      },
+      'Posted to platform',
+    );
   } catch (err) {
-    await deps.db.update(posts).set({
-      status: POST_STATUS.FAILED,
-      failureReason: err instanceof Error ? err.message : String(err),
-    }).where(eq(posts.id, postId));
+    await deps.db
+      .update(posts)
+      .set({
+        status: POST_STATUS.FAILED,
+        failureReason: err instanceof Error ? err.message : String(err),
+      })
+      .where(eq(posts.id, postId));
     throw err; // transient error — job queue retries
   }
 }

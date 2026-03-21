@@ -7,7 +7,7 @@ const envSchema = z.object({
   OPENAI_API_KEY: z.string().optional(),
   LLM_PROVIDER: z.enum(['claude', 'openai']).default('claude'),
   LLM_MODEL: z.string().default('claude-haiku-4-5-20251001'),
-  TWITTER_API_KEY: z.string().optional(),    // app-level key (shared across all accounts)
+  TWITTER_API_KEY: z.string().optional(), // app-level key (shared across all accounts)
   TWITTER_API_SECRET: z.string().optional(), // app-level secret (shared across all accounts)
   TWITTER_BEARER_TOKEN: z.string().optional(),
   // Per-account access tokens are stored in accounts.credentials JSONB, not in env

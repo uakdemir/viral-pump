@@ -1,16 +1,16 @@
 export type MediaType = 'image' | 'video' | 'text-only' | 'long-form';
 
 export const COMPATIBLE_PLATFORMS: Record<string, Set<MediaType>> = {
-  twitter:    new Set(['image', 'text-only']),
-  instagram:  new Set(['image']),
-  linkedin:   new Set(['image', 'text-only']),
-  pinterest:  new Set(['image']),
-  telegram:   new Set(['image', 'text-only']),
+  twitter: new Set(['image', 'text-only']),
+  instagram: new Set(['image']),
+  linkedin: new Set(['image', 'text-only']),
+  pinterest: new Set(['image']),
+  telegram: new Set(['image', 'text-only']),
   newsletter: new Set(['image', 'text-only']),
-  tiktok:     new Set(['video']),
-  youtube:    new Set(['video']),
-  reddit:     new Set(['long-form']),
-  blog:       new Set(['long-form']),
+  tiktok: new Set(['video']),
+  youtube: new Set(['video']),
+  reddit: new Set(['long-form']),
+  blog: new Set(['long-form']),
 };
 
 export function getContentMediaType(visualUrl: string | null): MediaType {

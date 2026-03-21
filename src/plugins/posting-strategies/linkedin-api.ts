@@ -21,7 +21,9 @@ export class LinkedInApiPostingStrategy implements PostingStrategy {
 
   validateInput(input: PostInput): void {
     if (input.text.length > MAX_TEXT_LENGTH) {
-      throw new Error(`LinkedIn text exceeds ${MAX_TEXT_LENGTH} characters (got ${input.text.length})`);
+      throw new Error(
+        `LinkedIn text exceeds ${MAX_TEXT_LENGTH} characters (got ${input.text.length})`,
+      );
     }
 
     if (input.media) {
@@ -33,7 +35,9 @@ export class LinkedInApiPostingStrategy implements PostingStrategy {
         throw new Error(`LinkedIn only accepts JPEG/PNG (got ${input.media.mimeType})`);
       }
       if (input.media.fileSizeBytes && input.media.fileSizeBytes > MAX_FILE_SIZE_BYTES) {
-        throw new Error(`Media file size exceeds 5 MB limit (got ${input.media.fileSizeBytes} bytes)`);
+        throw new Error(
+          `Media file size exceeds 5 MB limit (got ${input.media.fileSizeBytes} bytes)`,
+        );
       }
     }
   }
@@ -44,7 +48,7 @@ export class LinkedInApiPostingStrategy implements PostingStrategy {
     }
 
     const headers = {
-      'Authorization': `Bearer ${this.accessToken}`,
+      Authorization: `Bearer ${this.accessToken}`,
       'Content-Type': 'application/json',
       'X-Restli-Protocol-Version': '2.0.0',
     };
@@ -102,7 +106,7 @@ export class LinkedInApiPostingStrategy implements PostingStrategy {
       const uploadRes = await fetch(uploadUrl, {
         method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${this.accessToken}`,
+          Authorization: `Bearer ${this.accessToken}`,
           'Content-Type': input.media.mimeType,
         },
         body: imageBuffer,

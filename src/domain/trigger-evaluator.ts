@@ -17,7 +17,7 @@ export interface RuleInput {
   fireMode: FireMode;
   cooldownMs: number;
   lastFiredAt: Date | null;
-  lastPredicateResult?: boolean;  // previous evaluation result, for threshold_cross transition detection
+  lastPredicateResult?: boolean; // previous evaluation result, for threshold_cross transition detection
   contentConfig: ContentConfig;
 }
 
@@ -39,17 +39,26 @@ export function matchesEvent(match: Record<string, string>, event: DetectedEvent
   return true;
 }
 
-function evaluatePredicate(predicate: { field: string; operator: string; value: number }, eventData: Record<string, unknown>): boolean {
+function evaluatePredicate(
+  predicate: { field: string; operator: string; value: number },
+  eventData: Record<string, unknown>,
+): boolean {
   const actual = eventData[predicate.field];
   if (typeof actual !== 'number') return false;
 
   switch (predicate.operator) {
-    case 'gt': return actual > predicate.value;
-    case 'gte': return actual >= predicate.value;
-    case 'lt': return actual < predicate.value;
-    case 'lte': return actual <= predicate.value;
-    case 'eq': return actual === predicate.value;
-    default: return false;
+    case 'gt':
+      return actual > predicate.value;
+    case 'gte':
+      return actual >= predicate.value;
+    case 'lt':
+      return actual < predicate.value;
+    case 'lte':
+      return actual <= predicate.value;
+    case 'eq':
+      return actual === predicate.value;
+    default:
+      return false;
   }
 }
 
@@ -58,7 +67,11 @@ function isCooldownExpired(lastFiredAt: Date | null, cooldownMs: number): boolea
   return Date.now() - lastFiredAt.getTime() >= cooldownMs;
 }
 
-export function evaluatePredicates(predicates: RuleCondition['predicates'], logic: 'AND' | 'OR', eventData: Record<string, unknown>): boolean {
+export function evaluatePredicates(
+  predicates: RuleCondition['predicates'],
+  logic: 'AND' | 'OR',
+  eventData: Record<string, unknown>,
+): boolean {
   if (predicates.length === 0) return true;
   if (logic === 'OR') {
     return predicates.some(p => evaluatePredicate(p, eventData));
@@ -101,7 +114,11 @@ export class DefaultTriggerEvaluator implements TriggerEvaluator {
 export function validateContentConfig(config: unknown): config is ContentConfig {
   if (!config || typeof config !== 'object') return false;
   const c = config as any;
-  if (c.templateSelection !== TEMPLATE_SELECTION.NAMED && c.templateSelection !== TEMPLATE_SELECTION.RANDOM) return false;
+  if (
+    c.templateSelection !== TEMPLATE_SELECTION.NAMED &&
+    c.templateSelection !== TEMPLATE_SELECTION.RANDOM
+  )
+    return false;
   if (!Array.isArray(c.templateNames) || c.templateNames.length === 0) return false;
   return c.templateNames.every((n: unknown) => typeof n === 'string');
 }

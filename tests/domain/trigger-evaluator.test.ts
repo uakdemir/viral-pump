@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { DefaultTriggerEvaluator, matchesEvent, validateContentConfig } from '../../src/domain/trigger-evaluator.js';
+import {
+  DefaultTriggerEvaluator,
+  matchesEvent,
+  validateContentConfig,
+} from '../../src/domain/trigger-evaluator.js';
 import type { DetectedEvent } from '../../src/domain/detected-event.js';
 
 const goldEvent: DetectedEvent = {
@@ -49,108 +53,243 @@ describe('DefaultTriggerEvaluator', () => {
   const validConfig = { templateSelection: 'named' as const, templateNames: ['x'] };
 
   it('fires when single predicate satisfied and cooldown expired', () => {
-    expect(evaluator.evaluate({
-      condition: { match: { source: 'coingecko' }, predicates: [{ field: 'changePct', operator: 'gt', value: 1.0 }], logic: 'AND' },
-      fireMode: 'threshold_cross', cooldownMs: 3600000, lastFiredAt: null, contentConfig: validConfig,
-    }, goldEvent)).toBe(true);
+    expect(
+      evaluator.evaluate(
+        {
+          condition: {
+            match: { source: 'coingecko' },
+            predicates: [{ field: 'changePct', operator: 'gt', value: 1.0 }],
+            logic: 'AND',
+          },
+          fireMode: 'threshold_cross',
+          cooldownMs: 3600000,
+          lastFiredAt: null,
+          contentConfig: validConfig,
+        },
+        goldEvent,
+      ),
+    ).toBe(true);
   });
 
   it('does not fire when within cooldown', () => {
-    expect(evaluator.evaluate({
-      condition: { match: { source: 'coingecko' }, predicates: [{ field: 'changePct', operator: 'gt', value: 1.0 }], logic: 'AND' },
-      fireMode: 'threshold_cross', cooldownMs: 3600000, lastFiredAt: new Date(), contentConfig: validConfig,
-    }, goldEvent)).toBe(false);
+    expect(
+      evaluator.evaluate(
+        {
+          condition: {
+            match: { source: 'coingecko' },
+            predicates: [{ field: 'changePct', operator: 'gt', value: 1.0 }],
+            logic: 'AND',
+          },
+          fireMode: 'threshold_cross',
+          cooldownMs: 3600000,
+          lastFiredAt: new Date(),
+          contentConfig: validConfig,
+        },
+        goldEvent,
+      ),
+    ).toBe(false);
   });
 
   it('does not fire when predicate not met', () => {
-    expect(evaluator.evaluate({
-      condition: { match: {}, predicates: [{ field: 'changePct', operator: 'gt', value: 5.0 }], logic: 'AND' },
-      fireMode: 'threshold_cross', cooldownMs: 0, lastFiredAt: null, contentConfig: validConfig,
-    }, goldEvent)).toBe(false);
+    expect(
+      evaluator.evaluate(
+        {
+          condition: {
+            match: {},
+            predicates: [{ field: 'changePct', operator: 'gt', value: 5.0 }],
+            logic: 'AND',
+          },
+          fireMode: 'threshold_cross',
+          cooldownMs: 0,
+          lastFiredAt: null,
+          contentConfig: validConfig,
+        },
+        goldEvent,
+      ),
+    ).toBe(false);
   });
 
   it('AND logic — all predicates must pass', () => {
-    expect(evaluator.evaluate({
-      condition: { match: {}, predicates: [
-        { field: 'price', operator: 'gt', value: 70000 },
-        { field: 'changePct', operator: 'gt', value: 1.0 },
-      ], logic: 'AND' },
-      fireMode: 'threshold_cross', cooldownMs: 0, lastFiredAt: null, contentConfig: validConfig,
-    }, goldEvent)).toBe(true);
+    expect(
+      evaluator.evaluate(
+        {
+          condition: {
+            match: {},
+            predicates: [
+              { field: 'price', operator: 'gt', value: 70000 },
+              { field: 'changePct', operator: 'gt', value: 1.0 },
+            ],
+            logic: 'AND',
+          },
+          fireMode: 'threshold_cross',
+          cooldownMs: 0,
+          lastFiredAt: null,
+          contentConfig: validConfig,
+        },
+        goldEvent,
+      ),
+    ).toBe(true);
   });
 
   it('AND logic — fails if one predicate fails', () => {
-    expect(evaluator.evaluate({
-      condition: { match: {}, predicates: [
-        { field: 'price', operator: 'gt', value: 70000 },
-        { field: 'changePct', operator: 'gt', value: 5.0 },
-      ], logic: 'AND' },
-      fireMode: 'threshold_cross', cooldownMs: 0, lastFiredAt: null, contentConfig: validConfig,
-    }, goldEvent)).toBe(false);
+    expect(
+      evaluator.evaluate(
+        {
+          condition: {
+            match: {},
+            predicates: [
+              { field: 'price', operator: 'gt', value: 70000 },
+              { field: 'changePct', operator: 'gt', value: 5.0 },
+            ],
+            logic: 'AND',
+          },
+          fireMode: 'threshold_cross',
+          cooldownMs: 0,
+          lastFiredAt: null,
+          contentConfig: validConfig,
+        },
+        goldEvent,
+      ),
+    ).toBe(false);
   });
 
   it('threshold_cross — does NOT re-fire while condition remains true', () => {
-    expect(evaluator.evaluate({
-      condition: { match: {}, predicates: [{ field: 'changePct', operator: 'gt', value: 1.0 }], logic: 'AND' },
-      fireMode: 'threshold_cross', cooldownMs: 0, lastFiredAt: null,
-      lastPredicateResult: true, // was already true — no transition
-      contentConfig: validConfig,
-    }, goldEvent)).toBe(false);
+    expect(
+      evaluator.evaluate(
+        {
+          condition: {
+            match: {},
+            predicates: [{ field: 'changePct', operator: 'gt', value: 1.0 }],
+            logic: 'AND',
+          },
+          fireMode: 'threshold_cross',
+          cooldownMs: 0,
+          lastFiredAt: null,
+          lastPredicateResult: true, // was already true — no transition
+          contentConfig: validConfig,
+        },
+        goldEvent,
+      ),
+    ).toBe(false);
   });
 
   it('threshold_cross — fires on false→true transition', () => {
-    expect(evaluator.evaluate({
-      condition: { match: {}, predicates: [{ field: 'changePct', operator: 'gt', value: 1.0 }], logic: 'AND' },
-      fireMode: 'threshold_cross', cooldownMs: 0, lastFiredAt: null,
-      lastPredicateResult: false, // was false, now true — transition!
-      contentConfig: validConfig,
-    }, goldEvent)).toBe(true);
+    expect(
+      evaluator.evaluate(
+        {
+          condition: {
+            match: {},
+            predicates: [{ field: 'changePct', operator: 'gt', value: 1.0 }],
+            logic: 'AND',
+          },
+          fireMode: 'threshold_cross',
+          cooldownMs: 0,
+          lastFiredAt: null,
+          lastPredicateResult: false, // was false, now true — transition!
+          contentConfig: validConfig,
+        },
+        goldEvent,
+      ),
+    ).toBe(true);
   });
 
   it('threshold_cross — fires on first evaluation (undefined→true)', () => {
-    expect(evaluator.evaluate({
-      condition: { match: {}, predicates: [{ field: 'changePct', operator: 'gt', value: 1.0 }], logic: 'AND' },
-      fireMode: 'threshold_cross', cooldownMs: 0, lastFiredAt: null,
-      lastPredicateResult: undefined, // first evaluation
-      contentConfig: validConfig,
-    }, goldEvent)).toBe(true);
+    expect(
+      evaluator.evaluate(
+        {
+          condition: {
+            match: {},
+            predicates: [{ field: 'changePct', operator: 'gt', value: 1.0 }],
+            logic: 'AND',
+          },
+          fireMode: 'threshold_cross',
+          cooldownMs: 0,
+          lastFiredAt: null,
+          lastPredicateResult: undefined, // first evaluation
+          contentConfig: validConfig,
+        },
+        goldEvent,
+      ),
+    ).toBe(true);
   });
 
   it('OR logic — fires if any predicate passes', () => {
-    expect(evaluator.evaluate({
-      condition: { match: {}, predicates: [
-        { field: 'changePct', operator: 'gt', value: 5.0 },
-        { field: 'price', operator: 'gt', value: 70000 },
-      ], logic: 'OR' },
-      fireMode: 'threshold_cross', cooldownMs: 0, lastFiredAt: null, contentConfig: validConfig,
-    }, goldEvent)).toBe(true);
+    expect(
+      evaluator.evaluate(
+        {
+          condition: {
+            match: {},
+            predicates: [
+              { field: 'changePct', operator: 'gt', value: 5.0 },
+              { field: 'price', operator: 'gt', value: 70000 },
+            ],
+            logic: 'OR',
+          },
+          fireMode: 'threshold_cross',
+          cooldownMs: 0,
+          lastFiredAt: null,
+          contentConfig: validConfig,
+        },
+        goldEvent,
+      ),
+    ).toBe(true);
   });
 
   it('does not fire for scheduled fire_mode', () => {
-    expect(evaluator.evaluate({
-      condition: { match: {}, predicates: [], logic: 'AND' },
-      fireMode: 'scheduled', cooldownMs: 0, lastFiredAt: null, contentConfig: validConfig,
-    }, goldEvent)).toBe(false);
+    expect(
+      evaluator.evaluate(
+        {
+          condition: { match: {}, predicates: [], logic: 'AND' },
+          fireMode: 'scheduled',
+          cooldownMs: 0,
+          lastFiredAt: null,
+          contentConfig: validConfig,
+        },
+        goldEvent,
+      ),
+    ).toBe(false);
   });
 
   it('fires with empty predicates (match-only)', () => {
-    expect(evaluator.evaluate({
-      condition: { match: { source: 'coingecko' }, predicates: [], logic: 'AND' },
-      fireMode: 'every_poll', cooldownMs: 0, lastFiredAt: null, contentConfig: validConfig,
-    }, goldEvent)).toBe(true);
+    expect(
+      evaluator.evaluate(
+        {
+          condition: { match: { source: 'coingecko' }, predicates: [], logic: 'AND' },
+          fireMode: 'every_poll',
+          cooldownMs: 0,
+          lastFiredAt: null,
+          contentConfig: validConfig,
+        },
+        goldEvent,
+      ),
+    ).toBe(true);
   });
 
   it('supports lt operator', () => {
-    expect(evaluator.evaluate({
-      condition: { match: {}, predicates: [{ field: 'price', operator: 'lt', value: 100000 }], logic: 'AND' },
-      fireMode: 'threshold_cross', cooldownMs: 0, lastFiredAt: null, contentConfig: validConfig,
-    }, goldEvent)).toBe(true);
+    expect(
+      evaluator.evaluate(
+        {
+          condition: {
+            match: {},
+            predicates: [{ field: 'price', operator: 'lt', value: 100000 }],
+            logic: 'AND',
+          },
+          fireMode: 'threshold_cross',
+          cooldownMs: 0,
+          lastFiredAt: null,
+          contentConfig: validConfig,
+        },
+        goldEvent,
+      ),
+    ).toBe(true);
   });
 });
 
 describe('validateContentConfig', () => {
   it('accepts valid named config', () => {
-    expect(validateContentConfig({ templateSelection: 'named', templateNames: ['a', 'b'] })).toBe(true);
+    expect(validateContentConfig({ templateSelection: 'named', templateNames: ['a', 'b'] })).toBe(
+      true,
+    );
   });
 
   it('accepts valid random config', () => {

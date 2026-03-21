@@ -2,7 +2,10 @@ import type { MetricsCollector, MetricsData } from './types.js';
 import { logger } from '../../shared/logger.js';
 
 export class TwitterMetricsCollector implements MetricsCollector {
-  async collect(platformPostId: string, credentials: Record<string, unknown>): Promise<MetricsData> {
+  async collect(
+    platformPostId: string,
+    credentials: Record<string, unknown>,
+  ): Promise<MetricsData> {
     const bearerToken = credentials.bearerToken as string;
     if (!bearerToken) throw new Error('Twitter bearer token not configured');
 

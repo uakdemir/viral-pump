@@ -2,7 +2,11 @@ import { eq, and, sql } from 'drizzle-orm';
 import { posts } from '../shared/schema/posts.js';
 import { accounts } from '../shared/schema/accounts.js';
 import { metricsSnapshots } from '../shared/schema/metrics-snapshots.js';
-import { shouldPoll, PLATFORM_HOURLY_BUDGETS, METRICS_SCHEDULES } from '../shared/metrics-schedules.js';
+import {
+  shouldPoll,
+  PLATFORM_HOURLY_BUDGETS,
+  METRICS_SCHEDULES,
+} from '../shared/metrics-schedules.js';
 import type { DB } from '../shared/db.js';
 import type { MetricsCollector } from '../plugins/metrics-collectors/types.js';
 import type { PluginRegistry } from '../plugins/registry.js';
@@ -12,11 +16,19 @@ interface MetricsPollerDeps {
   db: DB;
   metricsCollectorRegistry: PluginRegistry<MetricsCollector>;
   config: Config;
-  logger: { info: (...args: any[]) => void; warn: (...args: any[]) => void; error: (...args: any[]) => void; debug: (...args: any[]) => void };
+  logger: {
+    info: (...args: any[]) => void;
+    warn: (...args: any[]) => void;
+    error: (...args: any[]) => void;
+    debug: (...args: any[]) => void;
+  };
 }
 
 // Exported for testing
-export function mergeMetrics(existing: Record<string, unknown>, collected: Record<string, unknown>): Record<string, unknown> {
+export function mergeMetrics(
+  existing: Record<string, unknown>,
+  collected: Record<string, unknown>,
+): Record<string, unknown> {
   return { ...existing, ...collected };
 }
 
@@ -59,7 +71,9 @@ export class MetricsPoller {
       }
       this.pollCycle().catch(err => this.deps.logger.error({ err }, 'Metrics poll cycle failed'));
     }, 60_000);
-    this.pollCycle().catch(err => this.deps.logger.error({ err }, 'Initial metrics poll cycle failed'));
+    this.pollCycle().catch(err =>
+      this.deps.logger.error({ err }, 'Initial metrics poll cycle failed'),
+    );
   }
 
   stop(): void {
@@ -102,13 +116,15 @@ export class MetricsPoller {
       })
       .from(posts)
       .innerJoin(accounts, eq(posts.accountId, accounts.id))
-      .where(and(
-        eq(posts.status, 'posted'),
-        eq(posts.metricsDisabled, false),
-        sql`${posts.platformPostId} IS NOT NULL`,
-        sql`${posts.platformPostId} NOT LIKE 'dry-run-%'`,
-        sql`${posts.postedAt} >= ${oldestEligible}::timestamptz`,
-      ))
+      .where(
+        and(
+          eq(posts.status, 'posted'),
+          eq(posts.metricsDisabled, false),
+          sql`${posts.platformPostId} IS NOT NULL`,
+          sql`${posts.platformPostId} NOT LIKE 'dry-run-%'`,
+          sql`${posts.postedAt} >= ${oldestEligible}::timestamptz`,
+        ),
+      )
       .orderBy(sql`${posts.postedAt} DESC`);
 
     for (const post of eligiblePosts) {
@@ -161,7 +177,10 @@ export class MetricsPoller {
       const accountCreds = (post.accountCredentials ?? {}) as Record<string, unknown>;
       const credentials = buildCredentials(platform, accountCreds, this.deps.config);
       if (!credentials) {
-        this.deps.logger.debug({ platform, postId: post.postId }, 'Missing credentials, skipping metrics collection');
+        this.deps.logger.debug(
+          { platform, postId: post.postId },
+          'Missing credentials, skipping metrics collection',
+        );
         postsSkipped++;
         continue;
       }
@@ -191,18 +210,26 @@ export class MetricsPoller {
         });
 
         // Update post with latest
-        await this.deps.db.update(posts).set({
-          metrics: mergedMetrics,
-          lastMetricsCollectedAt: new Date(),
-        }).where(eq(posts.id, post.postId));
+        await this.deps.db
+          .update(posts)
+          .set({
+            metrics: mergedMetrics,
+            lastMetricsCollectedAt: new Date(),
+          })
+          .where(eq(posts.id, post.postId));
 
         postsPolled++;
       } catch (err: any) {
         errors++;
 
         if (err.unrecoverable) {
-          this.deps.logger.warn({ postId: post.postId, err: err.message }, 'Unrecoverable metrics error — disabling collection');
-          await this.deps.db.update(posts).set({ metricsDisabled: true })
+          this.deps.logger.warn(
+            { postId: post.postId, err: err.message },
+            'Unrecoverable metrics error — disabling collection',
+          );
+          await this.deps.db
+            .update(posts)
+            .set({ metricsDisabled: true })
             .where(eq(posts.id, post.postId));
           continue;
         }
@@ -213,7 +240,10 @@ export class MetricsPoller {
           continue;
         }
 
-        this.deps.logger.warn({ postId: post.postId, err: err.message }, 'Metrics collection failed, will retry next cycle');
+        this.deps.logger.warn(
+          { postId: post.postId, err: err.message },
+          'Metrics collection failed, will retry next cycle',
+        );
       }
     }
 

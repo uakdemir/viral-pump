@@ -5,7 +5,11 @@ import type { PostingStrategy, PostInput, PostResult } from './types.js';
 import { logger } from '../../shared/logger.js';
 
 function esc(str: string): string {
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
 
 interface NewsletterStubConfig {
@@ -52,7 +56,10 @@ export class NewsletterStubPostingStrategy implements PostingStrategy {
   <h1>${subject}</h1>
   ${imageTag}
   <div class="content">
-    ${input.text.split('\n').map(p => `<p>${esc(p)}</p>`).join('\n    ')}
+    ${input.text
+      .split('\n')
+      .map(p => `<p>${esc(p)}</p>`)
+      .join('\n    ')}
   </div>
 </body>
 </html>`;
@@ -60,11 +67,14 @@ export class NewsletterStubPostingStrategy implements PostingStrategy {
     const filepath = path.join(this.outputDir, `${fakeId}.html`);
     await writeFile(filepath, html);
 
-    logger.info({
-      fakeId,
-      subject,
-      savedTo: filepath,
-    }, '[Newsletter] Generated newsletter HTML');
+    logger.info(
+      {
+        fakeId,
+        subject,
+        savedTo: filepath,
+      },
+      '[Newsletter] Generated newsletter HTML',
+    );
 
     return {
       platformPostId: fakeId,

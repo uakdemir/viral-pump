@@ -8,16 +8,18 @@ import { approveContent, editAndApprove, rejectContent } from '../../domain/revi
 
 export function registerContentItemsRoutes(app: FastifyInstance, db: DB, jobQueue: JobQueue) {
   // GET /api/content-items?status=pending
-  app.get('/api/content-items', async (request) => {
+  app.get('/api/content-items', async request => {
     const { status } = request.query as { status?: string };
 
     let query = db.select().from(contentItems).orderBy(desc(contentItems.createdAt));
 
     if (status === REVIEW_STATUS.PENDING) {
-      query = query.where(and(
-        eq(contentItems.generationStatus, GENERATION_STATUS.READY),
-        eq(contentItems.reviewStatus, REVIEW_STATUS.PENDING),
-      )) as any;
+      query = query.where(
+        and(
+          eq(contentItems.generationStatus, GENERATION_STATUS.READY),
+          eq(contentItems.reviewStatus, REVIEW_STATUS.PENDING),
+        ),
+      ) as any;
     } else if (status) {
       query = query.where(eq(contentItems.reviewStatus, status)) as any;
     }

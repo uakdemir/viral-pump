@@ -10,11 +10,13 @@ function createMockJobQueue() {
 }
 
 // Minimal mock DB that supports the chained Drizzle query patterns used in posts.ts
-function createMockDb(opts: {
-  queryItems?: any[];
-  summaryRow?: Record<string, any>;
-  singlePost?: any;
-} = {}) {
+function createMockDb(
+  opts: {
+    queryItems?: any[];
+    summaryRow?: Record<string, any>;
+    singlePost?: any;
+  } = {},
+) {
   const { queryItems = [], summaryRow = {}, singlePost = undefined } = opts;
 
   const db = {
@@ -27,13 +29,15 @@ function createMockDb(opts: {
       }),
       where: vi.fn().mockResolvedValue(singlePost ? [singlePost] : []),
     }),
-    execute: vi.fn().mockResolvedValue([{
-      total_posts: summaryRow.totalPosts ?? 0,
-      total_views: summaryRow.totalViews ?? 0,
-      total_likes: summaryRow.totalLikes ?? 0,
-      total_shares: summaryRow.totalShares ?? 0,
-      total_comments: summaryRow.totalComments ?? 0,
-    }]),
+    execute: vi.fn().mockResolvedValue([
+      {
+        total_posts: summaryRow.totalPosts ?? 0,
+        total_views: summaryRow.totalViews ?? 0,
+        total_likes: summaryRow.totalLikes ?? 0,
+        total_shares: summaryRow.totalShares ?? 0,
+        total_comments: summaryRow.totalComments ?? 0,
+      },
+    ]),
     update: vi.fn().mockReturnValue({
       set: vi.fn().mockReturnValue({
         where: vi.fn().mockResolvedValue(undefined),
@@ -74,7 +78,13 @@ describe('GET /api/posts', () => {
 
   it('returns { items, summary } when summary=true', async () => {
     const items = [{ id: 'p1', status: 'posted' }];
-    const summaryRow = { totalPosts: 5, totalViews: 1200, totalLikes: 45, totalShares: 12, totalComments: 3 };
+    const summaryRow = {
+      totalPosts: 5,
+      totalViews: 1200,
+      totalLikes: 45,
+      totalShares: 12,
+      totalComments: 3,
+    };
     const db = createMockDb({ queryItems: items, summaryRow });
     const jobQueue = createMockJobQueue();
 

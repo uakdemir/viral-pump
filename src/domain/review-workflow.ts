@@ -4,7 +4,11 @@ import { contentTemplates } from '../shared/schema/content-templates.js';
 import { posts } from '../shared/schema/posts.js';
 import { accounts } from '../shared/schema/accounts.js';
 import { REVIEW_STATUS, JOB_TYPES } from '../shared/constants.js';
-import { getContentMediaType, isCompatible, type MediaType } from '../shared/platform-compatibility.js';
+import {
+  getContentMediaType,
+  isCompatible,
+  type MediaType,
+} from '../shared/platform-compatibility.js';
 import { logger as defaultLogger } from '../shared/logger.js';
 import type { DB } from '../shared/db.js';
 import type { JobQueue } from '../plugins/job-queue/types.js';
@@ -30,24 +34,30 @@ export function filterAccountsByCompatibility(
  * Platform-aware routing: template.platform filters explicitly, NULL uses COMPATIBLE_PLATFORMS.
  */
 async function createPostsForContent(
-  db: DB, jobQueue: JobQueue, contentItemId: string, verticalId: string,
+  db: DB,
+  jobQueue: JobQueue,
+  contentItemId: string,
+  verticalId: string,
   log: typeof defaultLogger = defaultLogger,
 ): Promise<void> {
   // Get content item and template for routing
-  const [contentItem] = await db.select().from(contentItems)
+  const [contentItem] = await db
+    .select()
+    .from(contentItems)
     .where(eq(contentItems.id, contentItemId));
 
   const [template] = contentItem?.templateId
-    ? await db.select().from(contentTemplates).where(eq(contentTemplates.id, contentItem.templateId))
+    ? await db
+        .select()
+        .from(contentTemplates)
+        .where(eq(contentTemplates.id, contentItem.templateId))
     : [null];
 
   // Get all active accounts for this vertical
-  const allActiveAccounts = await db.select()
+  const allActiveAccounts = await db
+    .select()
     .from(accounts)
-    .where(and(
-      eq(accounts.verticalId, verticalId),
-      eq(accounts.status, 'active'),
-    ));
+    .where(and(eq(accounts.verticalId, verticalId), eq(accounts.status, 'active')));
 
   // Filter by platform compatibility
   const mediaType = getContentMediaType(contentItem?.visualUrl ?? null);
@@ -59,17 +69,21 @@ async function createPostsForContent(
 
   // Zero-match: warn and return — no post rows created
   if (targetAccounts.length === 0) {
-    log.warn({
-      contentItemId,
-      templateName: template?.name,
-      templatePlatform: template?.platform,
-      mediaType,
-    }, 'No matching active accounts — approval succeeded but no posts created');
+    log.warn(
+      {
+        contentItemId,
+        templateName: template?.name,
+        templatePlatform: template?.platform,
+        mediaType,
+      },
+      'No matching active accounts — approval succeeded but no posts created',
+    );
     return;
   }
 
   for (const account of targetAccounts as Array<{ id: string; platform: string }>) {
-    const inserted = await db.insert(posts)
+    const inserted = await db
+      .insert(posts)
       .values({ contentId: contentItemId, accountId: account.id })
       .onConflictDoNothing()
       .returning({ id: posts.id });
@@ -84,13 +98,17 @@ async function createPostsForContent(
   }
 }
 
-export async function approveContent(db: DB, jobQueue: JobQueue, contentItemId: string): Promise<boolean> {
-  const result = await db.update(contentItems)
+export async function approveContent(
+  db: DB,
+  jobQueue: JobQueue,
+  contentItemId: string,
+): Promise<boolean> {
+  const result = await db
+    .update(contentItems)
     .set({ reviewStatus: REVIEW_STATUS.APPROVED, reviewedAt: new Date() })
-    .where(and(
-      eq(contentItems.id, contentItemId),
-      eq(contentItems.reviewStatus, REVIEW_STATUS.PENDING),
-    ))
+    .where(
+      and(eq(contentItems.id, contentItemId), eq(contentItems.reviewStatus, REVIEW_STATUS.PENDING)),
+    )
     .returning({ id: contentItems.id, verticalId: contentItems.verticalId });
 
   if (result.length === 0) return false;
@@ -100,19 +118,22 @@ export async function approveContent(db: DB, jobQueue: JobQueue, contentItemId: 
 }
 
 export async function editAndApprove(
-  db: DB, jobQueue: JobQueue, contentItemId: string, finalText: string,
+  db: DB,
+  jobQueue: JobQueue,
+  contentItemId: string,
+  finalText: string,
 ): Promise<boolean> {
-  const result = await db.update(contentItems)
+  const result = await db
+    .update(contentItems)
     .set({
       finalText,
       editedAt: new Date(),
       reviewStatus: REVIEW_STATUS.APPROVED,
       reviewedAt: new Date(),
     })
-    .where(and(
-      eq(contentItems.id, contentItemId),
-      eq(contentItems.reviewStatus, REVIEW_STATUS.PENDING),
-    ))
+    .where(
+      and(eq(contentItems.id, contentItemId), eq(contentItems.reviewStatus, REVIEW_STATUS.PENDING)),
+    )
     .returning({ id: contentItems.id, verticalId: contentItems.verticalId });
 
   if (result.length === 0) return false;
@@ -122,18 +143,20 @@ export async function editAndApprove(
 }
 
 export async function rejectContent(
-  db: DB, contentItemId: string, notes?: string,
+  db: DB,
+  contentItemId: string,
+  notes?: string,
 ): Promise<boolean> {
-  const result = await db.update(contentItems)
+  const result = await db
+    .update(contentItems)
     .set({
       reviewStatus: REVIEW_STATUS.REJECTED,
       reviewNotes: notes ?? null,
       reviewedAt: new Date(),
     })
-    .where(and(
-      eq(contentItems.id, contentItemId),
-      eq(contentItems.reviewStatus, REVIEW_STATUS.PENDING),
-    ))
+    .where(
+      and(eq(contentItems.id, contentItemId), eq(contentItems.reviewStatus, REVIEW_STATUS.PENDING)),
+    )
     .returning({ id: contentItems.id });
 
   return result.length > 0;

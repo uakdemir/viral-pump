@@ -30,8 +30,9 @@ describe('fillPromptTemplate', () => {
 
 describe('fillHtmlTemplate', () => {
   it('escapes HTML characters', () => {
-    expect(fillHtmlTemplate('{{text}}', { text: '<script>alert("xss")</script>' }))
-      .toBe('&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;');
+    expect(fillHtmlTemplate('{{text}}', { text: '<script>alert("xss")</script>' })).toBe(
+      '&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;',
+    );
   });
 
   it('escapes ampersands', () => {

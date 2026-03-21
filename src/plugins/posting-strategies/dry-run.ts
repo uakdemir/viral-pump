@@ -34,12 +34,15 @@ export class DryRunPostingStrategy implements PostingStrategy {
     const filepath = path.join(this.outputDir, `${fakeId}.json`);
     await writeFile(filepath, JSON.stringify(record, null, 2));
 
-    logger.info({
-      fakePostId: fakeId,
-      charCount: input.text.length,
-      hasMedia: !!input.media,
-      savedTo: filepath,
-    }, '[DRY-RUN] Would have posted');
+    logger.info(
+      {
+        fakePostId: fakeId,
+        charCount: input.text.length,
+        hasMedia: !!input.media,
+        savedTo: filepath,
+      },
+      '[DRY-RUN] Would have posted',
+    );
 
     return {
       platformPostId: fakeId,

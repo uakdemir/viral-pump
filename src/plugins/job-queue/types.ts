@@ -7,10 +7,14 @@ export interface Job {
 }
 
 export interface JobQueue {
-  enqueue(type: string, payload: Record<string, unknown>, options?: {
-    scheduledAt?: Date;
-    maxAttempts?: number;
-  }): Promise<string>;
+  enqueue(
+    type: string,
+    payload: Record<string, unknown>,
+    options?: {
+      scheduledAt?: Date;
+      maxAttempts?: number;
+    },
+  ): Promise<string>;
 
   dequeue(workerId: string, leaseDurationMs: number): Promise<Job | null>;
 

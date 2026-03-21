@@ -7,7 +7,7 @@ export const FIRE_MODES = {
   SCHEDULED: 'scheduled',
 } as const;
 
-export type FireMode = typeof FIRE_MODES[keyof typeof FIRE_MODES];
+export type FireMode = (typeof FIRE_MODES)[keyof typeof FIRE_MODES];
 
 export const GENERATION_STATUS = {
   GENERATING: 'generating',

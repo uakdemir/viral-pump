@@ -17,7 +17,9 @@ export class PuppeteerHtmlVisualGenerator implements VisualGenerator {
     const { templateConfig, context } = input;
     const templateName = templateConfig?.template as string;
     if (!templateName) {
-      throw new Error('visualTemplate.template is required but missing or empty. Set skipVisual: true to skip visual generation, or provide a template name.');
+      throw new Error(
+        'visualTemplate.template is required but missing or empty. Set skipVisual: true to skip visual generation, or provide a template name.',
+      );
     }
     const width = (templateConfig?.config as any)?.width ?? 1200;
     const height = (templateConfig?.config as any)?.height ?? 628;
@@ -28,7 +30,10 @@ export class PuppeteerHtmlVisualGenerator implements VisualGenerator {
     try {
       htmlTemplate = await readFile(templatePath, 'utf-8');
     } catch (err) {
-      throw new Error(`Visual template not found: ${templatePath}. This is a configuration error — check content_templates.visualTemplate.template value.`);
+      throw new Error(
+        `Visual template not found: ${templatePath}. This is a configuration error — check content_templates.visualTemplate.template value.`,
+        { cause: err },
+      );
     }
 
     // Fill placeholders with HTML-escaped context
@@ -43,7 +48,7 @@ export class PuppeteerHtmlVisualGenerator implements VisualGenerator {
       const page = await browser.newPage();
       await page.setViewport({ width, height });
       await page.setContent(html, { waitUntil: 'networkidle0' });
-      const buffer = await page.screenshot({ type: 'png' }) as Buffer;
+      const buffer = (await page.screenshot({ type: 'png' })) as Buffer;
       return buffer;
     } finally {
       await browser.close();

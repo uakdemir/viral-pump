@@ -26,7 +26,11 @@ interface EventDetectorDeps {
   db: DB;
   jobQueue: JobQueue;
   evaluatorRegistry: PluginRegistry<TriggerEvaluator>;
-  logger: { info: (...args: any[]) => void; warn: (...args: any[]) => void; error: (...args: any[]) => void };
+  logger: {
+    info: (...args: any[]) => void;
+    warn: (...args: any[]) => void;
+    error: (...args: any[]) => void;
+  };
 }
 
 export class EventDetector {
@@ -41,16 +45,17 @@ export class EventDetector {
   }
 
   async processEvents(events: DetectedEvent[], verticalId: string): Promise<void> {
-    const [vertical] = await this.deps.db.select().from(verticals)
+    const [vertical] = await this.deps.db
+      .select()
+      .from(verticals)
       .where(eq(verticals.id, verticalId));
     const evaluatorName = (vertical?.config as any)?.defaults?.triggerEvaluator ?? 'default';
     const evaluator = this.deps.evaluatorRegistry.resolve(evaluatorName, {});
 
-    const rules = await this.deps.db.select().from(triggerRules)
-      .where(and(
-        eq(triggerRules.verticalId, verticalId),
-        eq(triggerRules.enabled, true),
-      ));
+    const rules = await this.deps.db
+      .select()
+      .from(triggerRules)
+      .where(and(eq(triggerRules.verticalId, verticalId), eq(triggerRules.enabled, true)));
 
     // Initialize in-memory state from DB values (only if not already tracked)
     for (const rule of rules) {
@@ -70,7 +75,10 @@ export class EventDetector {
         const contentConfig = rule.contentConfig as any;
 
         if (!validateContentConfig(contentConfig)) {
-          this.deps.logger.error({ rule: rule.name }, 'Misconfigured content_config — skipping rule');
+          this.deps.logger.error(
+            { rule: rule.name },
+            'Misconfigured content_config — skipping rule',
+          );
           continue;
         }
 
@@ -94,61 +102,85 @@ export class EventDetector {
 
         // Update predicate state AFTER evaluation — only for matching events, only when changed
         if (matchesEvent(ruleCondition.match, event)) {
-          const currentResult = evaluatePredicates(ruleCondition.predicates, ruleCondition.logic, event.data);
+          const currentResult = evaluatePredicates(
+            ruleCondition.predicates,
+            ruleCondition.logic,
+            event.data,
+          );
           if (this.predicateState.get(rule.id) !== currentResult) {
             this.predicateState.set(rule.id, currentResult);
-            await this.deps.db.update(triggerRules)
+            await this.deps.db
+              .update(triggerRules)
               .set({ lastPredicateResult: currentResult })
               .where(eq(triggerRules.id, rule.id));
           }
         }
 
         if (!shouldFire) {
-          this.deps.logger.info({
-            rule: rule.name,
-            event: (event.data as any).instrument ?? event.type,
-            changePct: Number(((event.data as any).changePct ?? 0).toFixed(4)),
-            threshold: condition.predicates?.[0]?.value,
-            cooldownExpired: !rule.lastFiredAt || (Date.now() - rule.lastFiredAt.getTime() >= rule.cooldownMs),
-          }, 'Rule evaluated — did not fire');
+          this.deps.logger.info(
+            {
+              rule: rule.name,
+              event: (event.data as any).instrument ?? event.type,
+              changePct: Number(((event.data as any).changePct ?? 0).toFixed(4)),
+              threshold: condition.predicates?.[0]?.value,
+              cooldownExpired:
+                !rule.lastFiredAt || Date.now() - rule.lastFiredAt.getTime() >= rule.cooldownMs,
+            },
+            'Rule evaluated — did not fire',
+          );
           continue;
         }
 
         // Resolve and validate ALL configured templates BEFORE consuming cooldown
-        const allTemplates = await this.deps.db.select().from(contentTemplates)
-          .where(and(
-            eq(contentTemplates.verticalId, verticalId),
-            eq(contentTemplates.enabled, true),
-          ));
+        const allTemplates = await this.deps.db
+          .select()
+          .from(contentTemplates)
+          .where(
+            and(eq(contentTemplates.verticalId, verticalId), eq(contentTemplates.enabled, true)),
+          );
 
         const resolvedTemplates = allTemplates.filter(t =>
-          contentConfig.templateNames.includes(t.name)
+          contentConfig.templateNames.includes(t.name),
         );
 
         const resolvedNames = new Set(resolvedTemplates.map(t => t.name));
-        const missingNames = contentConfig.templateNames.filter((n: string) => !resolvedNames.has(n));
+        const missingNames = contentConfig.templateNames.filter(
+          (n: string) => !resolvedNames.has(n),
+        );
 
         if (missingNames.length > 0) {
-          this.deps.logger.error({
-            rule: rule.name,
-            missingNames,
-            configuredNames: contentConfig.templateNames,
-          }, 'Some configured template names not found or disabled — skipping without consuming cooldown');
+          this.deps.logger.error(
+            {
+              rule: rule.name,
+              missingNames,
+              configuredNames: contentConfig.templateNames,
+            },
+            'Some configured template names not found or disabled — skipping without consuming cooldown',
+          );
           continue;
         }
 
         let selectedTemplates = resolvedTemplates;
-        if (contentConfig.templateSelection === TEMPLATE_SELECTION.RANDOM && selectedTemplates.length > 0) {
-          selectedTemplates = [selectedTemplates[Math.floor(Math.random() * selectedTemplates.length)]];
+        if (
+          contentConfig.templateSelection === TEMPLATE_SELECTION.RANDOM &&
+          selectedTemplates.length > 0
+        ) {
+          selectedTemplates = [
+            selectedTemplates[Math.floor(Math.random() * selectedTemplates.length)],
+          ];
         }
 
-        this.deps.logger.info({ rule: rule.name, event: (event.data as any).instrument ?? event.type }, 'Trigger rule fired');
+        this.deps.logger.info(
+          { rule: rule.name, event: (event.data as any).instrument ?? event.type },
+          'Trigger rule fired',
+        );
 
         // Atomic: update last_fired_at + enqueue jobs in one transaction
         // If enqueue fails, cooldown is not consumed
         const firedAt = new Date();
-        await this.deps.db.transaction(async (tx) => {
-          await tx.update(triggerRules)
+        await this.deps.db.transaction(async tx => {
+          await tx
+            .update(triggerRules)
             .set({ lastFiredAt: firedAt })
             .where(eq(triggerRules.id, rule.id));
 

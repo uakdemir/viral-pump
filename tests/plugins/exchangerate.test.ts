@@ -9,7 +9,7 @@ describe('ExchangeRateProvider', () => {
   it('returns generic DetectedEvents with fields in data', async () => {
     const mockResponse = { rates: { TRY: 38.45, EUR: 0.92 }, base: 'USD' };
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-      new Response(JSON.stringify(mockResponse), { status: 200 })
+      new Response(JSON.stringify(mockResponse), { status: 200 }),
     );
 
     const provider = new ExchangeRateProvider({
@@ -30,7 +30,7 @@ describe('ExchangeRateProvider', () => {
     expect(tryEvent.verticalId).toBe('vertical-1');
     expect(tryEvent.data.price).toBe(38.45);
     expect(tryEvent.data.previousPrice).toBe(38.0);
-    expect((tryEvent.data.changePct as number)).toBeCloseTo(1.18, 1);
+    expect(tryEvent.data.changePct as number).toBeCloseTo(1.18, 1);
   });
 
   it('returns empty array on fetch error', async () => {

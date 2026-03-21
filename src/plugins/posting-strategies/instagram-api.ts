@@ -20,7 +20,9 @@ export class InstagramApiPostingStrategy implements PostingStrategy {
 
   validateInput(input: PostInput): void {
     if (input.text.length > MAX_TEXT_LENGTH) {
-      throw new Error(`Instagram caption exceeds ${MAX_TEXT_LENGTH} characters (got ${input.text.length})`);
+      throw new Error(
+        `Instagram caption exceeds ${MAX_TEXT_LENGTH} characters (got ${input.text.length})`,
+      );
     }
 
     if (!input.media) {
@@ -37,7 +39,9 @@ export class InstagramApiPostingStrategy implements PostingStrategy {
     }
 
     if (input.media.fileSizeBytes && input.media.fileSizeBytes > MAX_FILE_SIZE_BYTES) {
-      throw new Error(`Media file size exceeds 8 MB limit (got ${input.media.fileSizeBytes} bytes)`);
+      throw new Error(
+        `Media file size exceeds 8 MB limit (got ${input.media.fileSizeBytes} bytes)`,
+      );
     }
 
     // Aspect ratio check: Instagram accepts 1:1, 4:5, 16:9 (tolerance ±5%)
@@ -46,7 +50,9 @@ export class InstagramApiPostingStrategy implements PostingStrategy {
       const validRatios = [1, 4 / 5, 16 / 9];
       const isValid = validRatios.some(r => Math.abs(ratio - r) / r < 0.05);
       if (!isValid) {
-        throw new Error(`Instagram requires 1:1, 4:5, or 16:9 aspect ratio (got ${ratio.toFixed(2)})`);
+        throw new Error(
+          `Instagram requires 1:1, 4:5, or 16:9 aspect ratio (got ${ratio.toFixed(2)})`,
+        );
       }
     }
   }
@@ -58,11 +64,16 @@ export class InstagramApiPostingStrategy implements PostingStrategy {
 
     const imageUrl = input.media!.publicUrl ?? input.media!.path;
     if (!imageUrl.startsWith('http')) {
-      throw new Error('Instagram requires a publicly reachable image URL. Configure AssetStore with a public base URL or use S3/CDN.');
+      throw new Error(
+        'Instagram requires a publicly reachable image URL. Configure AssetStore with a public base URL or use S3/CDN.',
+      );
     }
 
     // Step 1: Create media container
-    logger.info({ accountId: this.instagramBusinessAccountId }, '[Instagram] Creating media container');
+    logger.info(
+      { accountId: this.instagramBusinessAccountId },
+      '[Instagram] Creating media container',
+    );
 
     const containerRes = await fetch(
       `https://graph.facebook.com/v19.0/${this.instagramBusinessAccountId}/media`,

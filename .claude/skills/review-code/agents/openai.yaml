@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Code"
+  short_description: "Review recent commits against spec and architecture"
+  default_prompt: "Use $review-code to review the last [COMMIT_COUNT] commits against [SPEC_DOC] and write findings to ./tmp/review_code.md (reading ./tmp/response_code.md if present)."

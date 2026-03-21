@@ -21,7 +21,9 @@ export class TelegramApiPostingStrategy implements PostingStrategy {
 
   validateInput(input: PostInput): void {
     if (input.text.length > MAX_TEXT_LENGTH) {
-      throw new Error(`Telegram text exceeds ${MAX_TEXT_LENGTH} characters (got ${input.text.length})`);
+      throw new Error(
+        `Telegram text exceeds ${MAX_TEXT_LENGTH} characters (got ${input.text.length})`,
+      );
     }
 
     if (input.media) {
@@ -33,7 +35,9 @@ export class TelegramApiPostingStrategy implements PostingStrategy {
         throw new Error(`Telegram only accepts JPEG/PNG (got ${input.media.mimeType})`);
       }
       if (input.media.fileSizeBytes && input.media.fileSizeBytes > MAX_FILE_SIZE_BYTES) {
-        throw new Error(`Media file size exceeds 10 MB limit (got ${input.media.fileSizeBytes} bytes)`);
+        throw new Error(
+          `Media file size exceeds 10 MB limit (got ${input.media.fileSizeBytes} bytes)`,
+        );
       }
     }
   }
@@ -43,7 +47,7 @@ export class TelegramApiPostingStrategy implements PostingStrategy {
       throw new Error('Telegram bot token not configured');
     }
 
-    const chatId = this.channelId ?? input.platformMeta?.channelId as string;
+    const chatId = this.channelId ?? (input.platformMeta?.channelId as string);
     if (!chatId) {
       throw new Error('Telegram channelId not configured and not provided in platformMeta');
     }
@@ -60,7 +64,11 @@ export class TelegramApiPostingStrategy implements PostingStrategy {
       const formData = new FormData();
       formData.append('chat_id', chatId);
       formData.append('caption', input.text);
-      formData.append('photo', new Blob([imageBuffer], { type: input.media.mimeType }), 'image.jpg');
+      formData.append(
+        'photo',
+        new Blob([imageBuffer], { type: input.media.mimeType }),
+        'image.jpg',
+      );
 
       const res = await fetch(`${baseUrl}/sendPhoto`, {
         method: 'POST',

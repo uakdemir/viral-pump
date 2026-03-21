@@ -9,7 +9,7 @@ describe('CoinGeckoProvider', () => {
   it('returns generic DetectedEvent with fields in data', async () => {
     const mockResponse = { gold: { usd: 2350 } };
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-      new Response(JSON.stringify(mockResponse), { status: 200 })
+      new Response(JSON.stringify(mockResponse), { status: 200 }),
     );
 
     const provider = new CoinGeckoProvider({
@@ -28,7 +28,7 @@ describe('CoinGeckoProvider', () => {
     expect(events[0].data.instrument).toBe('XAU/USD');
     expect(events[0].data.price).toBe(2350);
     expect(events[0].data.previousPrice).toBe(2320);
-    expect((events[0].data.changePct as number)).toBeCloseTo(1.29, 1);
+    expect(events[0].data.changePct as number).toBeCloseTo(1.29, 1);
   });
 
   it('returns empty array on fetch error', async () => {
@@ -44,9 +44,7 @@ describe('CoinGeckoProvider', () => {
   });
 
   it('returns empty array on non-200 response', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-      new Response('error', { status: 429 })
-    );
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('error', { status: 429 }));
 
     const provider = new CoinGeckoProvider({
       endpoint: 'https://api.coingecko.com/api/v3/simple/price',

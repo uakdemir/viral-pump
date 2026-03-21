@@ -42,29 +42,42 @@ const visualGenerator = new PuppeteerHtmlVisualGenerator();
 // Content generator registry
 const contentGeneratorRegistry = createRegistry<ContentGenerator>();
 if (config.ANTHROPIC_API_KEY) {
-  contentGeneratorRegistry.register('claude', (cfg) =>
-    new ClaudeContentGenerator({ apiKey: config.ANTHROPIC_API_KEY!, model: cfg.model ?? config.LLM_MODEL ?? DEFAULT_LLM_MODEL })
+  contentGeneratorRegistry.register(
+    'claude',
+    cfg =>
+      new ClaudeContentGenerator({
+        apiKey: config.ANTHROPIC_API_KEY!,
+        model: cfg.model ?? config.LLM_MODEL ?? DEFAULT_LLM_MODEL,
+      }),
   );
 }
 if (config.OPENAI_API_KEY) {
-  contentGeneratorRegistry.register('openai', (cfg) =>
-    new OpenAIContentGenerator({ apiKey: config.OPENAI_API_KEY!, model: cfg.model ?? 'gpt-4o-mini' })
+  contentGeneratorRegistry.register(
+    'openai',
+    cfg =>
+      new OpenAIContentGenerator({
+        apiKey: config.OPENAI_API_KEY!,
+        model: cfg.model ?? 'gpt-4o-mini',
+      }),
   );
 }
 
 // Posting strategy registry — each strategy gets full merged config, picks what it needs
 const postingStrategyRegistry = createRegistry<PostingStrategy>();
-postingStrategyRegistry.register('twitter-api', (cfg) => new TwitterApiPostingStrategy(cfg));
-postingStrategyRegistry.register('instagram-api', (cfg) => new InstagramApiPostingStrategy(cfg));
-postingStrategyRegistry.register('linkedin-api', (cfg) => new LinkedInApiPostingStrategy(cfg));
-postingStrategyRegistry.register('pinterest-api', (cfg) => new PinterestApiPostingStrategy(cfg));
-postingStrategyRegistry.register('telegram-api', (cfg) => new TelegramApiPostingStrategy(cfg));
-postingStrategyRegistry.register('newsletter', (cfg) => new NewsletterStubPostingStrategy(cfg));
-postingStrategyRegistry.register('tiktok-api', (cfg) => new TikTokStubPostingStrategy(cfg));
-postingStrategyRegistry.register('youtube-api', (cfg) => new YouTubeStubPostingStrategy(cfg));
-postingStrategyRegistry.register('reddit-api', (cfg) => new RedditStubPostingStrategy(cfg));
-postingStrategyRegistry.register('blog', (cfg) => new BlogStubPostingStrategy(cfg));
-postingStrategyRegistry.register('dry-run', (cfg) => new DryRunPostingStrategy({ outputDir: cfg.outputDir ?? config.ASSET_DIR + '/dry-run' }));
+postingStrategyRegistry.register('twitter-api', cfg => new TwitterApiPostingStrategy(cfg));
+postingStrategyRegistry.register('instagram-api', cfg => new InstagramApiPostingStrategy(cfg));
+postingStrategyRegistry.register('linkedin-api', cfg => new LinkedInApiPostingStrategy(cfg));
+postingStrategyRegistry.register('pinterest-api', cfg => new PinterestApiPostingStrategy(cfg));
+postingStrategyRegistry.register('telegram-api', cfg => new TelegramApiPostingStrategy(cfg));
+postingStrategyRegistry.register('newsletter', cfg => new NewsletterStubPostingStrategy(cfg));
+postingStrategyRegistry.register('tiktok-api', cfg => new TikTokStubPostingStrategy(cfg));
+postingStrategyRegistry.register('youtube-api', cfg => new YouTubeStubPostingStrategy(cfg));
+postingStrategyRegistry.register('reddit-api', cfg => new RedditStubPostingStrategy(cfg));
+postingStrategyRegistry.register('blog', cfg => new BlogStubPostingStrategy(cfg));
+postingStrategyRegistry.register(
+  'dry-run',
+  cfg => new DryRunPostingStrategy({ outputDir: cfg.outputDir ?? config.ASSET_DIR + '/dry-run' }),
+);
 
 const appCredentials = {
   apiKey: config.TWITTER_API_KEY ?? '',
@@ -129,7 +142,14 @@ async function processJobs(): Promise<void> {
             await handleGenerateVisual(job, { db, visualGenerator, assetStore, logger });
             break;
           case JOB_TYPES.POST_TO_PLATFORM:
-            await handlePostToPlatform(job, { db, postingStrategyRegistry, appCredentials, assetStore, assetDir: config.ASSET_DIR, logger });
+            await handlePostToPlatform(job, {
+              db,
+              postingStrategyRegistry,
+              appCredentials,
+              assetStore,
+              assetDir: config.ASSET_DIR,
+              logger,
+            });
             break;
           default:
             logger.warn({ type: job.type }, 'Unknown job type');

@@ -2,7 +2,10 @@ import type { MetricsCollector, MetricsData } from './types.js';
 import { logger } from '../../shared/logger.js';
 
 export class InstagramMetricsCollector implements MetricsCollector {
-  async collect(platformPostId: string, credentials: Record<string, unknown>): Promise<MetricsData> {
+  async collect(
+    platformPostId: string,
+    credentials: Record<string, unknown>,
+  ): Promise<MetricsData> {
     const accessToken = credentials.accessToken as string;
     if (!accessToken) throw new Error('Instagram access token not configured');
 
@@ -12,7 +15,9 @@ export class InstagramMetricsCollector implements MetricsCollector {
     );
 
     if (basicRes.status === 404) {
-      throw Object.assign(new Error(`Instagram media not found: ${platformPostId}`), { unrecoverable: true });
+      throw Object.assign(new Error(`Instagram media not found: ${platformPostId}`), {
+        unrecoverable: true,
+      });
     }
     if (basicRes.status === 429) {
       throw Object.assign(new Error('Instagram rate limit exceeded'), { rateLimited: true });
@@ -58,10 +63,18 @@ export class InstagramMetricsCollector implements MetricsCollector {
           const value = metric.values?.[0]?.value;
           if (value == null) continue;
           switch (metric.name) {
-            case 'impressions': result.impressions = value; break;
-            case 'reach': result.reach = value; break;
-            case 'saved': result.saves = value; break;
-            case 'shares': result.shares = value; break;
+            case 'impressions':
+              result.impressions = value;
+              break;
+            case 'reach':
+              result.reach = value;
+              break;
+            case 'saved':
+              result.saves = value;
+              break;
+            case 'shares':
+              result.shares = value;
+              break;
           }
         }
       }
@@ -70,10 +83,16 @@ export class InstagramMetricsCollector implements MetricsCollector {
       // Re-throw rate limit and auth errors — don't swallow them as "delayed insights"
       if (err.rateLimited || err.message?.includes('auth')) throw err;
       // For other insight failures, log and return partial data
-      logger.debug({ platformPostId, err: err.message }, 'Instagram insights not available, returning partial');
+      logger.debug(
+        { platformPostId, err: err.message },
+        'Instagram insights not available, returning partial',
+      );
     }
 
-    logger.debug({ platformPostId, likes: result.likes, impressions: result.impressions }, 'Instagram metrics collected');
+    logger.debug(
+      { platformPostId, likes: result.likes, impressions: result.impressions },
+      'Instagram metrics collected',
+    );
 
     return result;
   }

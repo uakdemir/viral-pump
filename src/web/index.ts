@@ -33,7 +33,7 @@ registerMetricsRoutes(app, db);
 // Health check
 app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
 
-app.listen({ port: config.PORT, host: '0.0.0.0' }, (err) => {
+app.listen({ port: config.PORT, host: '0.0.0.0' }, err => {
   if (err) {
     logger.error({ err }, 'Failed to start');
     process.exit(1);

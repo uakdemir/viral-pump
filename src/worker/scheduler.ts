@@ -15,8 +15,8 @@ import { validateContentConfig } from '../domain/trigger-evaluator.js';
 
 export function createDataSourceRegistry(): PluginRegistry<DataSourceProvider> {
   const registry = createRegistry<DataSourceProvider>();
-  registry.register('coingecko', (config) => new CoinGeckoProvider(config));
-  registry.register('exchangerate', (config) => new ExchangeRateProvider(config));
+  registry.register('coingecko', config => new CoinGeckoProvider(config));
+  registry.register('exchangerate', config => new ExchangeRateProvider(config));
   return registry;
 }
 
@@ -24,7 +24,11 @@ interface SchedulerDeps {
   db: DB;
   registry: PluginRegistry<DataSourceProvider>;
   onEvents: (events: DetectedEvent[], verticalId: string) => Promise<void>;
-  logger: { info: (...args: any[]) => void; warn: (...args: any[]) => void; error: (...args: any[]) => void };
+  logger: {
+    info: (...args: any[]) => void;
+    warn: (...args: any[]) => void;
+    error: (...args: any[]) => void;
+  };
 }
 
 export class Scheduler {
@@ -39,7 +43,9 @@ export class Scheduler {
 
   async start(): Promise<void> {
     // Start data source polling
-    const sources = await this.deps.db.select().from(dataSources)
+    const sources = await this.deps.db
+      .select()
+      .from(dataSources)
       .where(eq(dataSources.status, 'active'));
 
     for (const source of sources) {
@@ -47,7 +53,10 @@ export class Scheduler {
       const provider = this.deps.registry.resolve(source.provider, config);
       this.providers.set(source.id, provider);
 
-      this.deps.logger.info({ provider: source.provider, intervalMs: source.pollIntervalMs }, 'Starting data source polling');
+      this.deps.logger.info(
+        { provider: source.provider, intervalMs: source.pollIntervalMs },
+        'Starting data source polling',
+      );
 
       this.pollSource(source.id, source.verticalId, source.pollIntervalMs);
     }
@@ -57,10 +66,14 @@ export class Scheduler {
 
     // Start cron check loop
     this.cronTimer = setInterval(() => {
-      this.checkScheduledTriggers().catch(err => this.deps.logger.error({ err }, 'Scheduled trigger check failed'));
+      this.checkScheduledTriggers().catch(err =>
+        this.deps.logger.error({ err }, 'Scheduled trigger check failed'),
+      );
     }, 60000);
     // Also check immediately
-    this.checkScheduledTriggers().catch(err => this.deps.logger.error({ err }, 'Initial scheduled trigger check failed'));
+    this.checkScheduledTriggers().catch(err =>
+      this.deps.logger.error({ err }, 'Initial scheduled trigger check failed'),
+    );
   }
 
   private pollSource(sourceId: string, verticalId: string, intervalMs: number): void {
@@ -71,22 +84,26 @@ export class Scheduler {
 
         const events = await provider.poll(verticalId);
 
-        this.deps.logger.info({
-          sourceId,
-          eventCount: events.length,
-          events: events.map(e => ({
-            instrument: (e.data as any).instrument,
-            price: (e.data as any).price,
-            previousPrice: (e.data as any).previousPrice,
-            changePct: Number(((e.data as any).changePct ?? 0).toFixed(4)),
-          })),
-        }, 'Poll completed');
+        this.deps.logger.info(
+          {
+            sourceId,
+            eventCount: events.length,
+            events: events.map(e => ({
+              instrument: (e.data as any).instrument,
+              price: (e.data as any).price,
+              previousPrice: (e.data as any).previousPrice,
+              changePct: Number(((e.data as any).changePct ?? 0).toFixed(4)),
+            })),
+          },
+          'Poll completed',
+        );
 
         if (events.length > 0) {
           await this.deps.onEvents(events, verticalId);
         }
 
-        await this.deps.db.update(dataSources)
+        await this.deps.db
+          .update(dataSources)
           .set({ lastPolledAt: new Date() })
           .where(eq(dataSources.id, sourceId));
       } catch (err) {
@@ -101,11 +118,10 @@ export class Scheduler {
 
   private async initScheduledTriggers(): Promise<void> {
     // Find all scheduled rules with NULL or past next_scheduled_at
-    const rules = await this.deps.db.select().from(triggerRules)
-      .where(and(
-        eq(triggerRules.fireMode, FIRE_MODES.SCHEDULED),
-        eq(triggerRules.enabled, true),
-      ));
+    const rules = await this.deps.db
+      .select()
+      .from(triggerRules)
+      .where(and(eq(triggerRules.fireMode, FIRE_MODES.SCHEDULED), eq(triggerRules.enabled, true)));
 
     const now = new Date();
     for (const rule of rules) {
@@ -116,10 +132,14 @@ export class Scheduler {
       try {
         const interval = CronExpressionParser.parse(rule.schedule, { currentDate: now, tz: 'UTC' });
         const next = interval.next().toDate();
-        await this.deps.db.update(triggerRules)
+        await this.deps.db
+          .update(triggerRules)
           .set({ nextScheduledAt: next })
           .where(eq(triggerRules.id, rule.id));
-        this.deps.logger.info({ rule: rule.name, nextScheduledAt: next.toISOString() }, 'Initialized scheduled trigger');
+        this.deps.logger.info(
+          { rule: rule.name, nextScheduledAt: next.toISOString() },
+          'Initialized scheduled trigger',
+        );
       } catch (err) {
         this.deps.logger.error({ err, rule: rule.name }, 'Invalid cron expression');
       }
@@ -147,7 +167,7 @@ export class Scheduler {
     let selectionMode = '';
 
     // Entire claim + job insert + advance in one transaction
-    await this.deps.db.transaction(async (tx) => {
+    await this.deps.db.transaction(async tx => {
       // Claim a due rule with row lock
       const claimedRows = await tx.execute(sql`
         SELECT id, name, vertical_id, schedule, content_config, cooldown_ms, last_fired_at, next_scheduled_at
@@ -169,7 +189,10 @@ export class Scheduler {
       // Validate content_config
       const contentConfig = rule.content_config;
       if (!validateContentConfig(contentConfig)) {
-        this.deps.logger.error({ rule: rule.name, contentConfig }, 'Misconfigured content_config — skipping');
+        this.deps.logger.error(
+          { rule: rule.name, contentConfig },
+          'Misconfigured content_config — skipping',
+        );
         await this.advanceScheduleInTx(tx, rule.id, rule.schedule);
         fired = true;
         return;
@@ -190,18 +213,25 @@ export class Scheduler {
       selectionMode = contentConfig.templateSelection;
 
       // Resolve ALL configured templates first — validate before selecting
-      const templates = await tx.select().from(contentTemplates)
-        .where(and(
-          eq(contentTemplates.verticalId, rule.vertical_id),
-          eq(contentTemplates.enabled, true),
-        ));
+      const templates = await tx
+        .select()
+        .from(contentTemplates)
+        .where(
+          and(
+            eq(contentTemplates.verticalId, rule.vertical_id),
+            eq(contentTemplates.enabled, true),
+          ),
+        );
 
       const resolvedTemplates = templates.filter(t => templateNames.includes(t.name));
       const resolvedNames = new Set(resolvedTemplates.map(t => t.name));
       const missingNames = templateNames.filter((n: string) => !resolvedNames.has(n));
 
       if (missingNames.length > 0) {
-        this.deps.logger.error({ rule: rule.name, missingNames, templateNames }, 'Some configured template names not found or disabled — skipping');
+        this.deps.logger.error(
+          { rule: rule.name, missingNames, templateNames },
+          'Some configured template names not found or disabled — skipping',
+        );
         await this.advanceScheduleInTx(tx, rule.id, rule.schedule);
         fired = true;
         return;
@@ -209,7 +239,10 @@ export class Scheduler {
 
       // Apply selection mode after full validation
       let matchedTemplates = resolvedTemplates;
-      if (contentConfig.templateSelection === TEMPLATE_SELECTION.RANDOM && matchedTemplates.length > 0) {
+      if (
+        contentConfig.templateSelection === TEMPLATE_SELECTION.RANDOM &&
+        matchedTemplates.length > 0
+      ) {
         matchedTemplates = [matchedTemplates[Math.floor(Math.random() * matchedTemplates.length)]];
       }
 
@@ -246,7 +279,8 @@ export class Scheduler {
 
       // Advance schedule and update last_fired_at — all within same transaction
       await this.advanceScheduleInTx(tx, rule.id, rule.schedule);
-      await tx.update(triggerRules)
+      await tx
+        .update(triggerRules)
         .set({ lastFiredAt: new Date() })
         .where(eq(triggerRules.id, rule.id));
 
@@ -254,11 +288,14 @@ export class Scheduler {
     });
 
     if (fired && templateNamesList.length > 0) {
-      this.deps.logger.info({
-        rule: ruleName,
-        templates: templateNamesList,
-        selection: selectionMode,
-      }, 'Scheduled trigger fired');
+      this.deps.logger.info(
+        {
+          rule: ruleName,
+          templates: templateNamesList,
+          selection: selectionMode,
+        },
+        'Scheduled trigger fired',
+      );
     }
 
     return fired;
@@ -270,9 +307,7 @@ export class Scheduler {
     // Invalid cron expressions should be caught during initScheduledTriggers at startup.
     const interval = CronExpressionParser.parse(schedule, { currentDate: new Date(), tz: 'UTC' });
     const next = interval.next().toDate();
-    await tx.update(triggerRules)
-      .set({ nextScheduledAt: next })
-      .where(eq(triggerRules.id, ruleId));
+    await tx.update(triggerRules).set({ nextScheduledAt: next }).where(eq(triggerRules.id, ruleId));
   }
 
   stop(): void {

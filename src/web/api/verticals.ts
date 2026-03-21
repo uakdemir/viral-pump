@@ -42,7 +42,10 @@ export function registerVerticalsRoutes(app: FastifyInstance, db: DB) {
     const [rule] = await db.select().from(triggerRules).where(eq(triggerRules.id, id));
     if (!rule) return reply.status(404).send({ error: 'Not found' });
 
-    await db.update(triggerRules).set({ enabled: !rule.enabled }).where(eq(triggerRules.id, rule.id));
+    await db
+      .update(triggerRules)
+      .set({ enabled: !rule.enabled })
+      .where(eq(triggerRules.id, rule.id));
     return { enabled: !rule.enabled };
   });
 }

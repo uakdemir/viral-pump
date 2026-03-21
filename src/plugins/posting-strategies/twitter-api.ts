@@ -22,7 +22,12 @@ export class TwitterApiPostingStrategy implements PostingStrategy {
 
   private getClient(): TwitterApi {
     if (!this.client) {
-      if (!this.config.apiKey || !this.config.apiSecret || !this.config.accessToken || !this.config.accessTokenSecret) {
+      if (
+        !this.config.apiKey ||
+        !this.config.apiSecret ||
+        !this.config.accessToken ||
+        !this.config.accessTokenSecret
+      ) {
         throw new Error('Twitter credentials not configured');
       }
       this.client = new TwitterApi({
@@ -37,19 +42,25 @@ export class TwitterApiPostingStrategy implements PostingStrategy {
 
   validateInput(input: PostInput): void {
     if (input.text.length > MAX_TEXT_LENGTH) {
-      throw new Error(`Tweet text exceeds ${MAX_TEXT_LENGTH} characters (got ${input.text.length})`);
+      throw new Error(
+        `Tweet text exceeds ${MAX_TEXT_LENGTH} characters (got ${input.text.length})`,
+      );
     }
 
     if (input.media) {
       if (input.media.type !== 'image' && input.media.type !== 'gif') {
-        throw new Error(`Twitter strategy only supports image/gif media this milestone (got ${input.media.type})`);
+        throw new Error(
+          `Twitter strategy only supports image/gif media this milestone (got ${input.media.type})`,
+        );
       }
       const allowedMimes = ['image/jpeg', 'image/png', 'image/gif'];
       if (input.media.mimeType && !allowedMimes.includes(input.media.mimeType)) {
         throw new Error(`Twitter only accepts JPEG/PNG/GIF (got ${input.media.mimeType})`);
       }
       if (input.media.fileSizeBytes && input.media.fileSizeBytes > MAX_FILE_SIZE_BYTES) {
-        throw new Error(`Media file size exceeds 5 MB limit (got ${input.media.fileSizeBytes} bytes)`);
+        throw new Error(
+          `Media file size exceeds 5 MB limit (got ${input.media.fileSizeBytes} bytes)`,
+        );
       }
     }
   }

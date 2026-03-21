@@ -1,7 +1,7 @@
 export interface ContentGeneratorInput {
   promptTemplate: string;
   generationConfig: Record<string, unknown>;
-  context: Record<string, unknown>;  // pre-assembled context for template filling
+  context: Record<string, unknown>; // pre-assembled context for template filling
 }
 
 export interface ContentGeneratorOutput {

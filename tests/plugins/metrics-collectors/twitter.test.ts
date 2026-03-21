@@ -30,9 +30,7 @@ describe('TwitterMetricsCollector', () => {
   });
 
   it('throws unrecoverable on 404', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-      new Response('Not Found', { status: 404 }),
-    );
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('Not Found', { status: 404 }));
     const collector = new TwitterMetricsCollector();
     try {
       await collector.collect('bad-id', { bearerToken: 'test' });

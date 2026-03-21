@@ -31,8 +31,8 @@ export class ClaudeContentGenerator implements ContentGenerator {
     });
 
     const rawText = response.content
-      .filter((b) => b.type === 'text')
-      .map((b) => b.text)
+      .filter(b => b.type === 'text')
+      .map(b => b.text)
       .join('');
 
     const { text, tags } = parseLlmResponse(rawText);
@@ -46,4 +46,3 @@ export class ClaudeContentGenerator implements ContentGenerator {
     };
   }
 }
-

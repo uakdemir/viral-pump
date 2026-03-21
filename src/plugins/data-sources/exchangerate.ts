@@ -33,10 +33,13 @@ export class ExchangeRateProvider implements DataSourceProvider {
         return [];
       }
 
-      const data = await res.json() as { rates?: Record<string, number> };
+      const data = (await res.json()) as { rates?: Record<string, number> };
       const rates = data?.rates;
       if (!rates || typeof rates !== 'object') {
-        logger.warn({ data: JSON.stringify(data).slice(0, 200) }, 'Exchange rate API: no rates in response');
+        logger.warn(
+          { data: JSON.stringify(data).slice(0, 200) },
+          'Exchange rate API: no rates in response',
+        );
         return [];
       }
 
@@ -49,9 +52,10 @@ export class ExchangeRateProvider implements DataSourceProvider {
 
         const instrument = `${this.config.base}/${symbol}`;
         const previousRate = this.previousRates.get(instrument);
-        const changePct = previousRate != null && previousRate !== 0
-          ? ((rate - previousRate) / previousRate) * 100
-          : 0;
+        const changePct =
+          previousRate != null && previousRate !== 0
+            ? ((rate - previousRate) / previousRate) * 100
+            : 0;
 
         events.push({
           source: 'exchangerate',

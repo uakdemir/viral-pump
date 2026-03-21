@@ -17,7 +17,9 @@ export class PinterestApiPostingStrategy implements PostingStrategy {
 
   validateInput(input: PostInput): void {
     if (input.text.length > MAX_TEXT_LENGTH) {
-      throw new Error(`Pinterest description exceeds ${MAX_TEXT_LENGTH} characters (got ${input.text.length})`);
+      throw new Error(
+        `Pinterest description exceeds ${MAX_TEXT_LENGTH} characters (got ${input.text.length})`,
+      );
     }
 
     if (!input.media) {
@@ -38,7 +40,9 @@ export class PinterestApiPostingStrategy implements PostingStrategy {
     }
 
     if (input.media.fileSizeBytes && input.media.fileSizeBytes > MAX_FILE_SIZE_BYTES) {
-      throw new Error(`Media file size exceeds 20 MB limit (got ${input.media.fileSizeBytes} bytes)`);
+      throw new Error(
+        `Media file size exceeds 20 MB limit (got ${input.media.fileSizeBytes} bytes)`,
+      );
     }
 
     if (input.media.width && input.media.width < 600) {
@@ -54,7 +58,9 @@ export class PinterestApiPostingStrategy implements PostingStrategy {
     const boardId = input.platformMeta!.boardId as string;
     const imageUrl = input.media!.publicUrl ?? input.media!.path;
     if (!imageUrl.startsWith('http')) {
-      throw new Error('Pinterest requires a publicly reachable image URL. Configure AssetStore with a public base URL or use S3/CDN.');
+      throw new Error(
+        'Pinterest requires a publicly reachable image URL. Configure AssetStore with a public base URL or use S3/CDN.',
+      );
     }
 
     logger.info({ boardId }, '[Pinterest] Creating Pin');
@@ -74,7 +80,7 @@ export class PinterestApiPostingStrategy implements PostingStrategy {
     const res = await fetch('https://api.pinterest.com/v5/pins', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${this.accessToken}`,
+        Authorization: `Bearer ${this.accessToken}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(pinPayload),

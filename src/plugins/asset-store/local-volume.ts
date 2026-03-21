@@ -5,7 +5,10 @@ import type { AssetStore } from './types.js';
 export class LocalVolumeAssetStore implements AssetStore {
   private publicBaseUrl: string;
 
-  constructor(private baseDir: string, publicBaseUrl?: string) {
+  constructor(
+    private baseDir: string,
+    publicBaseUrl?: string,
+  ) {
     // Default: assume the web server serves assets at http://localhost:PORT/assets/
     // In production, this should be a CDN/S3 URL
     this.publicBaseUrl = publicBaseUrl ?? 'http://localhost:3001/assets';

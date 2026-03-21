@@ -47,16 +47,18 @@ function createLogger() {
   };
 }
 
-function makePost(overrides: Partial<{
-  postId: string;
-  platformPostId: string;
-  postedAt: Date;
-  lastMetricsCollectedAt: Date | null;
-  currentMetrics: Record<string, unknown>;
-  accountId: string;
-  accountPlatform: string;
-  accountCredentials: Record<string, unknown>;
-}> = {}) {
+function makePost(
+  overrides: Partial<{
+    postId: string;
+    platformPostId: string;
+    postedAt: Date;
+    lastMetricsCollectedAt: Date | null;
+    currentMetrics: Record<string, unknown>;
+    accountId: string;
+    accountPlatform: string;
+    accountCredentials: Record<string, unknown>;
+  }> = {},
+) {
   return {
     postId: 'post-1',
     platformPostId: '123456789',
@@ -88,7 +90,12 @@ describe('MetricsPoller — poll cycle behavior', () => {
       collect: vi.fn().mockResolvedValue({ likes: 42, shares: 7 }),
     }));
 
-    const poller = new MetricsPoller({ db: db as any, metricsCollectorRegistry: registry, config, logger });
+    const poller = new MetricsPoller({
+      db: db as any,
+      metricsCollectorRegistry: registry,
+      config,
+      logger,
+    });
     await (poller as any).doPollCycle();
 
     // Snapshot inserted with merged metrics
@@ -116,7 +123,12 @@ describe('MetricsPoller — poll cycle behavior', () => {
       collect: vi.fn().mockResolvedValue({ likes: 15, shares: 3 }),
     }));
 
-    const poller = new MetricsPoller({ db: db as any, metricsCollectorRegistry: registry, config, logger });
+    const poller = new MetricsPoller({
+      db: db as any,
+      metricsCollectorRegistry: registry,
+      config,
+      logger,
+    });
     await (poller as any).doPollCycle();
 
     expect(db._insertCalls[0].metrics).toEqual({ views: 100, likes: 15, shares: 3 });
@@ -132,7 +144,12 @@ describe('MetricsPoller — poll cycle behavior', () => {
       collect: vi.fn().mockRejectedValue(err404),
     }));
 
-    const poller = new MetricsPoller({ db: db as any, metricsCollectorRegistry: registry, config, logger });
+    const poller = new MetricsPoller({
+      db: db as any,
+      metricsCollectorRegistry: registry,
+      config,
+      logger,
+    });
     await (poller as any).doPollCycle();
 
     // No snapshot inserted
@@ -162,7 +179,12 @@ describe('MetricsPoller — poll cycle behavior', () => {
       }),
     }));
 
-    const poller = new MetricsPoller({ db: db as any, metricsCollectorRegistry: registry, config, logger });
+    const poller = new MetricsPoller({
+      db: db as any,
+      metricsCollectorRegistry: registry,
+      config,
+      logger,
+    });
     await (poller as any).doPollCycle();
 
     // Only 1 API call made — second post skipped due to platform-level rate limit
@@ -186,7 +208,12 @@ describe('MetricsPoller — poll cycle behavior', () => {
       collect: vi.fn().mockResolvedValue({ likes: 1 }),
     }));
 
-    const poller = new MetricsPoller({ db: db as any, metricsCollectorRegistry: registry, config: configNoToken, logger });
+    const poller = new MetricsPoller({
+      db: db as any,
+      metricsCollectorRegistry: registry,
+      config: configNoToken,
+      logger,
+    });
     await (poller as any).doPollCycle();
 
     expect(db._insertCalls).toHaveLength(0);
@@ -206,7 +233,12 @@ describe('MetricsPoller — poll cycle behavior', () => {
       collect: vi.fn().mockResolvedValue({ likes: 1 }),
     }));
 
-    const poller = new MetricsPoller({ db: db as any, metricsCollectorRegistry: registry, config, logger });
+    const poller = new MetricsPoller({
+      db: db as any,
+      metricsCollectorRegistry: registry,
+      config,
+      logger,
+    });
     await (poller as any).doPollCycle();
 
     expect(db._insertCalls).toHaveLength(0);
@@ -215,7 +247,9 @@ describe('MetricsPoller — poll cycle behavior', () => {
   it('reentrancy guard prevents overlapping poll cycles', async () => {
     const post = makePost();
     let resolveCollect: (v: any) => void;
-    const collectPromise = new Promise(r => { resolveCollect = r; });
+    const collectPromise = new Promise(r => {
+      resolveCollect = r;
+    });
 
     const db = createMockDb([post]);
     const logger = createLogger();
@@ -224,7 +258,12 @@ describe('MetricsPoller — poll cycle behavior', () => {
       collect: vi.fn().mockReturnValue(collectPromise),
     }));
 
-    const poller = new MetricsPoller({ db: db as any, metricsCollectorRegistry: registry, config, logger });
+    const poller = new MetricsPoller({
+      db: db as any,
+      metricsCollectorRegistry: registry,
+      config,
+      logger,
+    });
 
     // Start first cycle — will block on collectPromise
     const cycle1 = (poller as any).pollCycle();
@@ -247,10 +286,12 @@ describe('MetricsPoller — poll cycle behavior', () => {
 
   it('rolling budget tracks API calls within 1-hour window', async () => {
     // Create enough posts to potentially exceed budget
-    const posts = Array.from({ length: 3 }, (_, i) => makePost({
-      postId: `post-${i}`,
-      platformPostId: `${1000 + i}`,
-    }));
+    const posts = Array.from({ length: 3 }, (_, i) =>
+      makePost({
+        postId: `post-${i}`,
+        platformPostId: `${1000 + i}`,
+      }),
+    );
     const db = createMockDb(posts);
     const logger = createLogger();
 
@@ -258,7 +299,12 @@ describe('MetricsPoller — poll cycle behavior', () => {
       collect: vi.fn().mockResolvedValue({ likes: 1 }),
     }));
 
-    const poller = new MetricsPoller({ db: db as any, metricsCollectorRegistry: registry, config, logger });
+    const poller = new MetricsPoller({
+      db: db as any,
+      metricsCollectorRegistry: registry,
+      config,
+      logger,
+    });
 
     // Run a cycle — all 3 should succeed (Twitter budget is 1200)
     await (poller as any).doPollCycle();
@@ -284,7 +330,12 @@ describe('MetricsPoller — poll cycle behavior', () => {
       }),
     }));
 
-    const poller = new MetricsPoller({ db: db as any, metricsCollectorRegistry: registry, config, logger });
+    const poller = new MetricsPoller({
+      db: db as any,
+      metricsCollectorRegistry: registry,
+      config,
+      logger,
+    });
     await (poller as any).doPollCycle();
 
     // First post errored, second succeeded
@@ -304,7 +355,12 @@ describe('MetricsPoller — poll cycle behavior', () => {
     const db = createMockDb([]);
     const logger = createLogger();
 
-    const poller = new MetricsPoller({ db: db as any, metricsCollectorRegistry: registry, config, logger });
+    const poller = new MetricsPoller({
+      db: db as any,
+      metricsCollectorRegistry: registry,
+      config,
+      logger,
+    });
     await (poller as any).doPollCycle();
 
     expect(db._insertCalls).toHaveLength(0);
