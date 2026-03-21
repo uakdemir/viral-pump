@@ -21,6 +21,7 @@ export const contentItems = pgTable('content_items', {
   cost: jsonb('cost').notNull().default({}),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   index('idx_content_items_review').on(table.reviewStatus)
     .where(sql`generation_status = 'ready' AND review_status = 'pending'`),

@@ -9,5 +9,6 @@ export const dataSources = pgTable('data_sources', {
   pollIntervalMs: integer('poll_interval_ms').notNull().default(60000),
   status: text('status').notNull().default('active'),
   lastPolledAt: timestamp('last_polled_at', { withTimezone: true }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });

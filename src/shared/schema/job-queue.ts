@@ -16,6 +16,7 @@ export const jobQueue = pgTable('job_queue', {
   completedAt: timestamp('completed_at', { withTimezone: true }),
   error: jsonb('error'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   index('idx_job_queue_pending').on(table.scheduledAt).where(sql`status = 'pending'`),
   index('idx_job_queue_stale').on(table.leaseExpiresAt).where(sql`status = 'processing'`),

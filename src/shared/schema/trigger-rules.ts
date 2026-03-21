@@ -16,4 +16,5 @@ export const triggerRules = pgTable('trigger_rules', {
   lastFiredAt: timestamp('last_fired_at', { withTimezone: true }),
   enabled: boolean('enabled').notNull().default(true),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

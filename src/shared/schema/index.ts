@@ -6,3 +6,4 @@ export { contentTemplates } from './content-templates.js';
 export { contentItems } from './content-items.js';
 export { posts } from './posts.js';
 export { jobQueue } from './job-queue.js';
+export { metricsSnapshots } from './metrics-snapshots.js';

@@ -11,5 +11,6 @@ export const accounts = pgTable('accounts', {
   credentials: jsonb('credentials').notNull().default({}),
   config: jsonb('config').notNull().default({}),
   status: text('status').notNull().default('active'),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });

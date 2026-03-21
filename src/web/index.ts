@@ -10,6 +10,7 @@ import { createChildLogger } from '../shared/logger.js';
 import { registerContentItemsRoutes } from './api/content-items.js';
 import { registerPostsRoutes } from './api/posts.js';
 import { registerVerticalsRoutes } from './api/verticals.js';
+import { registerMetricsRoutes } from './api/metrics.js';
 
 const logger = createChildLogger({ process: 'web' });
 const db = createDb(config.VIRAL_DATABASE_URL);
@@ -27,6 +28,7 @@ await app.register(fastifyStatic, {
 registerContentItemsRoutes(app, db, jobQueue);
 registerPostsRoutes(app, db, jobQueue);
 registerVerticalsRoutes(app, db);
+registerMetricsRoutes(app, db);
 
 // Health check
 app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));

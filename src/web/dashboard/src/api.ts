@@ -42,6 +42,30 @@ export async function fetchPosts(status?: string) {
   return res.json();
 }
 
+export async function fetchPostsWithFilters(params: {
+  status?: string;
+  platform?: string;
+  vertical?: string;
+  since?: string;
+  until?: string;
+  summary?: boolean;
+}) {
+  const qs = new URLSearchParams();
+  if (params.status) qs.set('status', params.status);
+  if (params.platform) qs.set('platform', params.platform);
+  if (params.vertical) qs.set('vertical', params.vertical);
+  if (params.since) qs.set('since', params.since);
+  if (params.until) qs.set('until', params.until);
+  if (params.summary) qs.set('summary', 'true');
+  const res = await fetch(`${BASE}/api/posts?${qs}`);
+  return res.json();
+}
+
+export async function fetchMetricsHistory(postId: string) {
+  const res = await fetch(`${BASE}/api/posts/${postId}/metrics-history`);
+  return res.json();
+}
+
 export async function retryPost(id: string) {
   const res = await fetch(`${BASE}/api/posts/${id}/retry`, { method: 'POST' });
   return res.json();

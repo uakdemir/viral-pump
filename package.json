@@ -53,6 +53,7 @@
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-router-dom": "^7.13.1",
+    "recharts": "^3.8.0",
     "twitter-api-v2": "^1.29.0",
     "zod": "^4.3.6"
   }

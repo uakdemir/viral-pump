@@ -27,6 +27,10 @@ import { handleGenerateContent } from './handlers/generate-content.js';
 import { handleGenerateVisual } from './handlers/generate-visual.js';
 import { handlePostToPlatform } from './handlers/post-to-platform.js';
 import { JobReaper } from './job-reaper.js';
+import { MetricsPoller } from './metrics-poller.js';
+import { TwitterMetricsCollector } from '../plugins/metrics-collectors/twitter.js';
+import { InstagramMetricsCollector } from '../plugins/metrics-collectors/instagram.js';
+import type { MetricsCollector } from '../plugins/metrics-collectors/types.js';
 import { JOB_TYPES, DEFAULT_LLM_MODEL } from '../shared/constants.js';
 
 const logger = createChildLogger({ process: 'worker', workerId: config.WORKER_ID });
@@ -85,6 +89,14 @@ const scheduler = new Scheduler({
 // Job reaper
 const reaper = new JobReaper(db, logger);
 
+// Metrics collector registry — always register, let poller handle missing credentials
+const metricsCollectorRegistry = createRegistry<MetricsCollector>();
+metricsCollectorRegistry.register('twitter', () => new TwitterMetricsCollector());
+metricsCollectorRegistry.register('instagram', () => new InstagramMetricsCollector());
+
+// Metrics poller
+const metricsPoller = new MetricsPoller({ db, metricsCollectorRegistry, config, logger });
+
 // Lease durations per job type (ms)
 const leaseDurations: Record<string, number> = {
   [JOB_TYPES.GENERATE_CONTENT]: 5 * 60 * 1000,
@@ -138,6 +150,7 @@ async function processJobs(): Promise<void> {
 logger.info('Worker starting...');
 scheduler.start();
 reaper.start(60000);
+metricsPoller.start();
 processJobs();
 
 // Graceful shutdown
@@ -145,6 +158,7 @@ process.on('SIGTERM', () => {
   logger.info('Shutting down...');
   scheduler.stop();
   reaper.stop();
+  metricsPoller.stop();
   process.exit(0);
 });
 
@@ -152,5 +166,6 @@ process.on('SIGINT', () => {
   logger.info('Shutting down...');
   scheduler.stop();
   reaper.stop();
+  metricsPoller.stop();
   process.exit(0);
 });

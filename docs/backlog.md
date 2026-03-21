@@ -51,6 +51,30 @@ Items move from here into sub-project specs when ready to implement.
 
 ---
 
+## Operations & Automation
+
+### Instagram token auto-refresh cron
+**Priority:** Medium (before first real Instagram deployment)
+**Context:** Instagram access tokens expire every 60 days. Build a scheduled job that calls `GET /refresh_access_token` before expiry. ~20 lines of code. Without this, Instagram posting silently stops every 2 months until someone manually refreshes.
+**Decided:** 2026-03-21
+
+### "Connect Account" OAuth flow in dashboard
+**Priority:** Medium (reduces manual work per new account)
+**Context:** Currently, adding a new platform account requires manually generating tokens in developer portals and pasting them into SQL. A dashboard button ("Connect Twitter Account") that opens an OAuth popup, user authorizes, tokens stored in DB automatically — like Buffer/Hootsuite do. ~1-2 days per platform. Eliminates manual token copy-paste.
+**Decided:** 2026-03-21
+
+### Account health monitoring
+**Priority:** Low
+**Context:** Automated checks that tokens are still valid, accounts aren't suspended, rate limits aren't hit. Alerts when human action is needed (token expired, account flagged, rate limit approaching).
+**Decided:** 2026-03-21
+
+### Delegated account creation workflow
+**Priority:** Low (when scaling beyond founder-operated)
+**Context:** Use Meta Business Suite roles + Twitter Developer Portal team invites to delegate account creation to a VA or team member. Limited privileges — they create accounts + generate tokens, never see personal accounts. See `docs/guides/delegated-account-management.md` for the full workflow.
+**Decided:** 2026-03-21
+
+---
+
 ## Future Sub-Projects (from original decomposition)
 
 ### SP#2: Metrics Collector
