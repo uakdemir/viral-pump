@@ -4,11 +4,10 @@ import { TwitterMetricsCollector } from '../../../src/plugins/metrics-collectors
 describe('TwitterMetricsCollector', () => {
   beforeEach(() => vi.restoreAllMocks());
 
-  it('collects public metrics from tweet', async () => {
+  it('collects public metrics from tweet (bearer token — no views)', async () => {
     const mockResponse = {
       data: {
         public_metrics: {
-          impression_count: 1240,
           like_count: 23,
           retweet_count: 5,
           reply_count: 3,
@@ -22,11 +21,12 @@ describe('TwitterMetricsCollector', () => {
     );
     const collector = new TwitterMetricsCollector();
     const result = await collector.collect('tweet-123', { bearerToken: 'test-token' });
-    expect(result.views).toBe(1240);
+    // views not available via bearer token (requires OAuth user context)
+    expect(result.views).toBeUndefined();
     expect(result.likes).toBe(23);
-    expect(result.shares).toBe(7);
+    expect(result.shares).toBe(7); // retweets + quotes
     expect(result.comments).toBe(3);
-    expect(result.saves).toBe(7);
+    expect(result.saves).toBe(7); // bookmarks
   });
 
   it('throws unrecoverable on 404', async () => {

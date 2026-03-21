@@ -6,6 +6,9 @@ export class TwitterMetricsCollector implements MetricsCollector {
     const bearerToken = credentials.bearerToken as string;
     if (!bearerToken) throw new Error('Twitter bearer token not configured');
 
+    // public_metrics via bearer token: like_count, retweet_count, reply_count, quote_count, bookmark_count
+    // NOTE: impression_count (views) requires OAuth user context (non_public_metrics), not available via bearer token.
+    // To get views, would need to use OAuth 1.0a user token instead of bearer token.
     const url = `https://api.x.com/2/tweets/${platformPostId}?tweet.fields=public_metrics`;
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${bearerToken}` },
@@ -26,10 +29,10 @@ export class TwitterMetricsCollector implements MetricsCollector {
     const data = (await res.json()) as { data: { public_metrics: Record<string, number> } };
     const pm = data.data.public_metrics;
 
-    logger.debug({ platformPostId, views: pm.impression_count }, 'Twitter metrics collected');
+    logger.debug({ platformPostId, likes: pm.like_count }, 'Twitter metrics collected');
 
     return {
-      views: pm.impression_count,
+      // views: NOT available via bearer token (requires OAuth user context for non_public_metrics)
       likes: pm.like_count,
       shares: (pm.retweet_count ?? 0) + (pm.quote_count ?? 0),
       comments: pm.reply_count,

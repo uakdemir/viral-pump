@@ -1,4 +1,4 @@
-import { eq, and, sql, not, like } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { posts } from '../shared/schema/posts.js';
 import { accounts } from '../shared/schema/accounts.js';
 import { metricsSnapshots } from '../shared/schema/metrics-snapshots.js';
@@ -44,7 +44,8 @@ export function buildCredentials(
 export class MetricsPoller {
   private timer: NodeJS.Timeout | undefined;
   private deps: MetricsPollerDeps;
-  private hourlyCallCounts = new Map<string, { count: number; windowStart: number }>();
+  private callTimestamps = new Map<string, number[]>(); // rolling window of call timestamps per platform
+  private running = false; // reentrancy guard — prevents overlapping cycles
 
   constructor(deps: MetricsPollerDeps) {
     this.deps = deps;
@@ -52,9 +53,12 @@ export class MetricsPoller {
 
   start(): void {
     this.timer = setInterval(() => {
+      if (this.running) {
+        this.deps.logger.debug('Metrics poll cycle still running, skipping');
+        return;
+      }
       this.pollCycle().catch(err => this.deps.logger.error({ err }, 'Metrics poll cycle failed'));
     }, 60_000);
-    // Also run immediately
     this.pollCycle().catch(err => this.deps.logger.error({ err }, 'Initial metrics poll cycle failed'));
   }
 
@@ -63,13 +67,24 @@ export class MetricsPoller {
   }
 
   private async pollCycle(): Promise<void> {
+    if (this.running) return;
+    this.running = true;
+
+    try {
+      await this.doPollCycle();
+    } finally {
+      this.running = false;
+    }
+  }
+
+  private async doPollCycle(): Promise<void> {
     const now = Date.now();
     let postsPolled = 0;
     let postsSkipped = 0;
     let errors = 0;
     const platformsRateLimited = new Set<string>();
 
-    // Query eligible posts
+    // Query eligible posts — push filters into SQL to avoid scanning historical rows
     const eligiblePosts = await this.deps.db
       .select({
         postId: posts.id,
@@ -78,34 +93,26 @@ export class MetricsPoller {
         lastMetricsCollectedAt: posts.lastMetricsCollectedAt,
         currentMetrics: posts.metrics,
         accountId: posts.accountId,
+        accountPlatform: accounts.platform,
+        accountCredentials: accounts.credentials,
       })
       .from(posts)
+      .innerJoin(accounts, eq(posts.accountId, accounts.id))
       .where(and(
         eq(posts.status, 'posted'),
-        not(eq(posts.metricsDisabled, true)),
+        eq(posts.metricsDisabled, false),
+        sql`${posts.platformPostId} IS NOT NULL`,
+        sql`${posts.platformPostId} NOT LIKE 'dry-run-%'`,
       ))
       .orderBy(sql`${posts.postedAt} DESC`);
 
     for (const post of eligiblePosts) {
-      if (!post.platformPostId || isDryRunPost(post.platformPostId)) {
-        postsSkipped++;
-        continue;
-      }
-
       if (!post.postedAt) {
         postsSkipped++;
         continue;
       }
 
-      // Look up account for platform
-      const [account] = await this.deps.db.select().from(accounts)
-        .where(eq(accounts.id, post.accountId));
-      if (!account) {
-        postsSkipped++;
-        continue;
-      }
-
-      const platform = account.platform;
+      const platform = post.accountPlatform;
 
       // Skip if platform is rate-limited this cycle
       if (platformsRateLimited.has(platform)) {
@@ -130,24 +137,23 @@ export class MetricsPoller {
         continue;
       }
 
-      // Check hourly budget
+      // Check rolling hourly budget
       const budget = PLATFORM_HOURLY_BUDGETS[platform];
       if (budget) {
-        const tracker = this.hourlyCallCounts.get(platform);
-        const windowStart = tracker?.windowStart ?? 0;
-        if (now - windowStart > 60 * 60_000) {
-          // Reset hourly window
-          this.hourlyCallCounts.set(platform, { count: 0, windowStart: now });
-        }
-        const current = this.hourlyCallCounts.get(platform)!;
-        if (current.count + budget.callsPerPost > budget.budget) {
+        // Evict timestamps older than 1 hour
+        const timestamps = this.callTimestamps.get(platform) ?? [];
+        const oneHourAgo = now - 60 * 60_000;
+        const recentCalls = timestamps.filter(t => t > oneHourAgo);
+        this.callTimestamps.set(platform, recentCalls);
+
+        if (recentCalls.length + budget.callsPerPost > budget.budget) {
           postsSkipped++;
           continue;
         }
       }
 
       // Build credentials
-      const accountCreds = (account.credentials ?? {}) as Record<string, unknown>;
+      const accountCreds = (post.accountCredentials ?? {}) as Record<string, unknown>;
       const credentials = buildCredentials(platform, accountCreds, this.deps.config);
       if (!credentials) {
         this.deps.logger.debug({ platform, postId: post.postId }, 'Missing credentials, skipping metrics collection');
@@ -158,12 +164,15 @@ export class MetricsPoller {
       // Collect metrics
       try {
         const collector = this.deps.metricsCollectorRegistry.resolve(platform, {});
-        const collected = await collector.collect(post.platformPostId, credentials);
+        const collected = await collector.collect(post.platformPostId!, credentials);
 
-        // Track API calls
+        // Track API calls in rolling window
         if (budget) {
-          const tracker = this.hourlyCallCounts.get(platform)!;
-          tracker.count += budget.callsPerPost;
+          const timestamps = this.callTimestamps.get(platform) ?? [];
+          for (let i = 0; i < budget.callsPerPost; i++) {
+            timestamps.push(Date.now());
+          }
+          this.callTimestamps.set(platform, timestamps);
         }
 
         // Merge with existing

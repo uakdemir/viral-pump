@@ -4,9 +4,11 @@ Step-by-step instructions for creating platform accounts and obtaining API crede
 Based on real experience (March 2026) — verified working steps only.
 
 ---
+## Twitter/X — App Creation & API Credentials Well
 
 <details>
 <summary><h2>Twitter/X — App Creation & API Credentials</h2></summary>
+
 
 ### Prerequisites
 - A personal X (Twitter) account with a verified phone number and email
@@ -25,7 +27,7 @@ Based on real experience (March 2026) — verified working steps only.
 1. In the Developer Portal, go to **Apps** section
 2. Click **Create App**
 3. App name: `viralengine-gold-forex` (must be unique across all of X)
-4. Environment: leave as default
+4. Environment: leave as default (dev)
 5. Click Create
 
 **IMPORTANT:** After creation, you'll see **API Key**, **API Key Secret**, and **Bearer Token** displayed. **Copy all three immediately** — they may only be shown once.
@@ -69,6 +71,8 @@ Based on real experience (March 2026) — verified working steps only.
 </details>
 
 ---
+## Instagram — Business Account, Facebook Page & API Credentials
+
 
 <details>
 <summary><h2>Instagram — Business Account, Facebook Page & API Credentials</h2></summary>
@@ -105,7 +109,7 @@ All four layers are required. Instagram's Content Publishing API only works thro
 4. Choose a username (e.g., `fitpulsehq_`)
    - If your first choice is taken, try variations: `fitpulse.hq`, `thefitpulsehq`, `fitpulsehq_`
 5. When asked "Create in this Account Center?" → **Yes** (this links it to your personal Meta account for admin purposes — not publicly visible)
-6. Set a **password** — write it down, you'll need it for the developer portal
+6. Set a **password** — write it down, you'll need it for the developer portal (actually you share the same password with your account)
 7. Skip all onboarding steps (profile picture, follow suggestions, etc.)
 
 **IMPORTANT:** Make the account **public** — go to Settings → Privacy → turn OFF "Private Account". Private accounts can't use the Content Publishing API.
