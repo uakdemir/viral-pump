@@ -32,11 +32,11 @@
   "homepage": "https://github.com/uakdemir/viral-pump#readme",
   "lint-staged": {
     "*.{ts,tsx}": [
-      "prettier --check",
+      "prettier --write",
       "eslint"
     ],
     "*.{json,md,yml}": [
-      "prettier --check"
+      "prettier --write"
     ]
   },
   "devDependencies": {
