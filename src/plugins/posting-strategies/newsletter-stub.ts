@@ -3,14 +3,7 @@ import path from 'path';
 import { randomUUID } from 'crypto';
 import type { PostingStrategy, PostInput, PostResult } from './types.js';
 import { logger } from '../../shared/logger.js';
-
-function esc(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
+import { htmlEscape } from '../../shared/html.js';
 
 interface NewsletterStubConfig {
   outputDir?: string;
@@ -33,10 +26,10 @@ export class NewsletterStubPostingStrategy implements PostingStrategy {
     await mkdir(this.outputDir, { recursive: true });
 
     const fakeId = `newsletter-${randomUUID().slice(0, 8)}`;
-    const subject = esc(input.platformMeta!.subject as string);
+    const subject = htmlEscape(input.platformMeta!.subject as string);
 
     const imageTag = input.media?.path
-      ? `<img src="${esc(input.media.path)}" alt="${esc(input.media.altText ?? '')}" style="max-width:100%;height:auto;" />`
+      ? `<img src="${htmlEscape(input.media.path)}" alt="${htmlEscape(input.media.altText ?? '')}" style="max-width:100%;height:auto;" />`
       : '';
 
     const html = `<!DOCTYPE html>
@@ -58,7 +51,7 @@ export class NewsletterStubPostingStrategy implements PostingStrategy {
   <div class="content">
     ${input.text
       .split('\n')
-      .map(p => `<p>${esc(p)}</p>`)
+      .map(p => `<p>${htmlEscape(p)}</p>`)
       .join('\n    ')}
   </div>
 </body>

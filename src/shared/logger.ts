@@ -10,3 +10,10 @@ export const logger = pino({
 export function createChildLogger(context: Record<string, unknown>) {
   return logger.child(context);
 }
+
+export type LoggerLike = {
+  info: (...args: unknown[]) => void;
+  warn: (...args: unknown[]) => void;
+  error: (...args: unknown[]) => void;
+  debug?: (...args: unknown[]) => void;
+};

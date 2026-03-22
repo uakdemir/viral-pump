@@ -5,12 +5,14 @@ import type { DB } from '../../shared/db.js';
 import type { Job } from '../../plugins/job-queue/types.js';
 import type { VisualGenerator } from '../../plugins/visual-generators/types.js';
 import type { AssetStore } from '../../plugins/asset-store/types.js';
+import { asVisualTemplateConfig } from '../../plugins/visual-generators/config-parser.js';
+import type { LoggerLike } from '../../shared/logger.js';
 
 interface GenerateVisualDeps {
   db: DB;
   visualGenerator: VisualGenerator;
   assetStore: AssetStore;
-  logger: { info: (...args: any[]) => void; error: (...args: any[]) => void };
+  logger: LoggerLike;
 }
 
 export async function handleGenerateVisual(job: Job, deps: GenerateVisualDeps): Promise<void> {
@@ -30,8 +32,9 @@ export async function handleGenerateVisual(job: Job, deps: GenerateVisualDeps): 
     const visualUrl = await deps.assetStore.store(contentItemId, buffer, 'png');
 
     // Persist media metadata for downstream platform validation
-    const width = (templateConfig?.config as any)?.width ?? 1200;
-    const height = (templateConfig?.config as any)?.height ?? 628;
+    const typedConfig = asVisualTemplateConfig(templateConfig);
+    const width = typedConfig.config?.width ?? 1200;
+    const height = typedConfig.config?.height ?? 628;
     const mediaMeta = {
       mimeType: 'image/png',
       width,

@@ -11,17 +11,13 @@ import type { DB } from '../shared/db.js';
 import type { MetricsCollector } from '../plugins/metrics-collectors/types.js';
 import type { PluginRegistry } from '../plugins/registry.js';
 import type { Config } from '../shared/config.js';
+import type { LoggerLike } from '../shared/logger.js';
 
 interface MetricsPollerDeps {
   db: DB;
   metricsCollectorRegistry: PluginRegistry<MetricsCollector>;
   config: Config;
-  logger: {
-    info: (...args: any[]) => void;
-    warn: (...args: any[]) => void;
-    error: (...args: any[]) => void;
-    debug: (...args: any[]) => void;
-  };
+  logger: LoggerLike;
 }
 
 // Exported for testing
@@ -66,7 +62,7 @@ export class MetricsPoller {
   start(): void {
     this.timer = setInterval(() => {
       if (this.running) {
-        this.deps.logger.debug('Metrics poll cycle still running, skipping');
+        this.deps.logger.debug?.('Metrics poll cycle still running, skipping');
         return;
       }
       this.pollCycle().catch(err => this.deps.logger.error({ err }, 'Metrics poll cycle failed'));
@@ -177,7 +173,7 @@ export class MetricsPoller {
       const accountCreds = (post.accountCredentials ?? {}) as Record<string, unknown>;
       const credentials = buildCredentials(platform, accountCreds, this.deps.config);
       if (!credentials) {
-        this.deps.logger.debug(
+        this.deps.logger.debug?.(
           { platform, postId: post.postId },
           'Missing credentials, skipping metrics collection',
         );

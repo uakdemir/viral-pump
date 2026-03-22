@@ -1,5 +1,6 @@
 import { TwitterApi } from 'twitter-api-v2';
 import type { PostingStrategy, PostInput, PostResult } from './types.js';
+import { validatePostInput } from './validation.js';
 import { logger } from '../../shared/logger.js';
 
 interface TwitterApiConfig {
@@ -41,28 +42,14 @@ export class TwitterApiPostingStrategy implements PostingStrategy {
   }
 
   validateInput(input: PostInput): void {
-    if (input.text.length > MAX_TEXT_LENGTH) {
-      throw new Error(
-        `Tweet text exceeds ${MAX_TEXT_LENGTH} characters (got ${input.text.length})`,
-      );
-    }
-
-    if (input.media) {
-      if (input.media.type !== 'image' && input.media.type !== 'gif') {
-        throw new Error(
-          `Twitter strategy only supports image/gif media this milestone (got ${input.media.type})`,
-        );
-      }
-      const allowedMimes = ['image/jpeg', 'image/png', 'image/gif'];
-      if (input.media.mimeType && !allowedMimes.includes(input.media.mimeType)) {
-        throw new Error(`Twitter only accepts JPEG/PNG/GIF (got ${input.media.mimeType})`);
-      }
-      if (input.media.fileSizeBytes && input.media.fileSizeBytes > MAX_FILE_SIZE_BYTES) {
-        throw new Error(
-          `Media file size exceeds 5 MB limit (got ${input.media.fileSizeBytes} bytes)`,
-        );
-      }
-    }
+    validatePostInput(input, {
+      platformName: 'Twitter',
+      maxTextLength: MAX_TEXT_LENGTH,
+      maxFileSizeBytes: MAX_FILE_SIZE_BYTES,
+      maxFileSizeLabel: '5 MB',
+      allowedMediaTypes: ['image', 'gif'],
+      allowedMimeTypes: ['image/jpeg', 'image/png', 'image/gif'],
+    });
   }
 
   async post(input: PostInput): Promise<PostResult> {

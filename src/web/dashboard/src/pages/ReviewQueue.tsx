@@ -2,11 +2,12 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { ContentCard } from '../components/ContentCard.js';
 import { EditModal } from '../components/EditModal.js';
 import { fetchPendingContent, approveContent, editAndApprove, rejectContent } from '../api.js';
+import type { ContentItemDTO } from '../api-types.js';
 
 export function ReviewQueue() {
-  const [items, setItems] = useState<any[]>([]);
+  const [items, setItems] = useState<ContentItemDTO[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editingItem, setEditingItem] = useState<any>(null);
+  const [editingItem, setEditingItem] = useState<ContentItemDTO | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -58,7 +59,15 @@ export function ReviewQueue() {
       </h2>
 
       {items.length === 0 ? (
-        <div style={{ color: '#64748b', padding: '40px', textAlign: 'center', background: '#1e293b', borderRadius: '8px' }}>
+        <div
+          style={{
+            color: '#64748b',
+            padding: '40px',
+            textAlign: 'center',
+            background: '#1e293b',
+            borderRadius: '8px',
+          }}
+        >
           No content pending review. The worker will generate new content when events are detected.
         </div>
       ) : (

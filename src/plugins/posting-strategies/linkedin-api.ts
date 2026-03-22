@@ -1,5 +1,6 @@
 import { readFile } from 'fs/promises';
 import type { PostingStrategy, PostInput, PostResult } from './types.js';
+import { validatePostInput } from './validation.js';
 import { logger } from '../../shared/logger.js';
 
 interface LinkedInApiConfig {
@@ -20,26 +21,14 @@ export class LinkedInApiPostingStrategy implements PostingStrategy {
   }
 
   validateInput(input: PostInput): void {
-    if (input.text.length > MAX_TEXT_LENGTH) {
-      throw new Error(
-        `LinkedIn text exceeds ${MAX_TEXT_LENGTH} characters (got ${input.text.length})`,
-      );
-    }
-
-    if (input.media) {
-      if (input.media.type !== 'image') {
-        throw new Error(`LinkedIn strategy only supports image media (got ${input.media.type})`);
-      }
-      const allowedMimes = ['image/jpeg', 'image/png'];
-      if (input.media.mimeType && !allowedMimes.includes(input.media.mimeType)) {
-        throw new Error(`LinkedIn only accepts JPEG/PNG (got ${input.media.mimeType})`);
-      }
-      if (input.media.fileSizeBytes && input.media.fileSizeBytes > MAX_FILE_SIZE_BYTES) {
-        throw new Error(
-          `Media file size exceeds 5 MB limit (got ${input.media.fileSizeBytes} bytes)`,
-        );
-      }
-    }
+    validatePostInput(input, {
+      platformName: 'LinkedIn',
+      maxTextLength: MAX_TEXT_LENGTH,
+      maxFileSizeBytes: MAX_FILE_SIZE_BYTES,
+      maxFileSizeLabel: '5 MB',
+      allowedMediaTypes: ['image'],
+      allowedMimeTypes: ['image/jpeg', 'image/png'],
+    });
   }
 
   async post(input: PostInput): Promise<PostResult> {

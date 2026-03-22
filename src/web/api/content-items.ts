@@ -13,15 +13,17 @@ export function registerContentItemsRoutes(app: FastifyInstance, db: DB, jobQueu
 
     let query = db.select().from(contentItems).orderBy(desc(contentItems.createdAt));
 
+    // Drizzle's query builder changes type on each chained call, requiring a cast for reassignment.
+    // The where-clause arguments are fully typed; only the reassignment needs the cast.
     if (status === REVIEW_STATUS.PENDING) {
       query = query.where(
         and(
           eq(contentItems.generationStatus, GENERATION_STATUS.READY),
           eq(contentItems.reviewStatus, REVIEW_STATUS.PENDING),
         ),
-      ) as any;
+      ) as typeof query;
     } else if (status) {
-      query = query.where(eq(contentItems.reviewStatus, status)) as any;
+      query = query.where(eq(contentItems.reviewStatus, status)) as typeof query;
     }
 
     return query.limit(50);

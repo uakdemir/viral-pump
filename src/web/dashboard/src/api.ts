@@ -1,14 +1,15 @@
+import type {
+  ContentItemDTO,
+  PostsResponse,
+  VerticalDTO,
+  MetricsHistoryResponse,
+} from './api-types.js';
+
 const BASE = '';
 
 // Review Queue
-export async function fetchPendingContent() {
+export async function fetchPendingContent(): Promise<ContentItemDTO[]> {
   const res = await fetch(`${BASE}/api/content-items?status=pending`);
-  return res.json();
-}
-
-export async function fetchContentItems(status?: string) {
-  const qs = status ? `?status=${status}` : '';
-  const res = await fetch(`${BASE}/api/content-items${qs}`);
   return res.json();
 }
 
@@ -36,12 +37,6 @@ export async function rejectContent(id: string, notes?: string) {
 }
 
 // Post Monitor
-export async function fetchPosts(status?: string) {
-  const qs = status ? `?status=${status}` : '';
-  const res = await fetch(`${BASE}/api/posts${qs}`);
-  return res.json();
-}
-
 export async function fetchPostsWithFilters(params: {
   status?: string;
   platform?: string;
@@ -49,7 +44,7 @@ export async function fetchPostsWithFilters(params: {
   since?: string;
   until?: string;
   summary?: boolean;
-}) {
+}): Promise<PostsResponse> {
   const qs = new URLSearchParams();
   if (params.status) qs.set('status', params.status);
   if (params.platform) qs.set('platform', params.platform);
@@ -61,7 +56,7 @@ export async function fetchPostsWithFilters(params: {
   return res.json();
 }
 
-export async function fetchMetricsHistory(postId: string) {
+export async function fetchMetricsHistory(postId: string): Promise<MetricsHistoryResponse> {
   const res = await fetch(`${BASE}/api/posts/${postId}/metrics-history`);
   return res.json();
 }
@@ -72,7 +67,7 @@ export async function retryPost(id: string) {
 }
 
 // Verticals
-export async function fetchVerticals() {
+export async function fetchVerticals(): Promise<VerticalDTO[]> {
   const res = await fetch(`${BASE}/api/verticals`);
   return res.json();
 }

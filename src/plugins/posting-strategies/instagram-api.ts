@@ -1,4 +1,5 @@
 import type { PostingStrategy, PostInput, PostResult } from './types.js';
+import { validatePostInput } from './validation.js';
 import { logger } from '../../shared/logger.js';
 
 interface InstagramApiConfig {
@@ -19,33 +20,18 @@ export class InstagramApiPostingStrategy implements PostingStrategy {
   }
 
   validateInput(input: PostInput): void {
-    if (input.text.length > MAX_TEXT_LENGTH) {
-      throw new Error(
-        `Instagram caption exceeds ${MAX_TEXT_LENGTH} characters (got ${input.text.length})`,
-      );
-    }
+    validatePostInput(input, {
+      platformName: 'Instagram',
+      maxTextLength: MAX_TEXT_LENGTH,
+      maxFileSizeBytes: MAX_FILE_SIZE_BYTES,
+      maxFileSizeLabel: '8 MB',
+      requiresMedia: true,
+      allowedMediaTypes: ['image'],
+      allowedMimeTypes: ['image/jpeg', 'image/png'],
+    });
 
-    if (!input.media) {
-      throw new Error('Instagram requires media (image)');
-    }
-
-    if (input.media.type !== 'image') {
-      throw new Error(`Instagram strategy only supports image media (got ${input.media.type})`);
-    }
-
-    const allowedMimes = ['image/jpeg', 'image/png'];
-    if (input.media.mimeType && !allowedMimes.includes(input.media.mimeType)) {
-      throw new Error(`Instagram only accepts JPEG/PNG (got ${input.media.mimeType})`);
-    }
-
-    if (input.media.fileSizeBytes && input.media.fileSizeBytes > MAX_FILE_SIZE_BYTES) {
-      throw new Error(
-        `Media file size exceeds 8 MB limit (got ${input.media.fileSizeBytes} bytes)`,
-      );
-    }
-
-    // Aspect ratio check: Instagram accepts 1:1, 4:5, 16:9 (tolerance ±5%)
-    if (input.media.width && input.media.height) {
+    // Platform-specific: aspect ratio check
+    if (input.media && input.media.width && input.media.height) {
       const ratio = input.media.width / input.media.height;
       const validRatios = [1, 4 / 5, 16 / 9];
       const isValid = validRatios.some(r => Math.abs(ratio - r) / r < 0.05);

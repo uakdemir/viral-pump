@@ -2,8 +2,8 @@ import puppeteer from 'puppeteer';
 import { readFile } from 'fs/promises';
 import path from 'path';
 import type { VisualGenerator, VisualGeneratorInput } from './types.js';
+import { asVisualTemplateConfig } from './config-parser.js';
 import { fillHtmlTemplate } from '../../shared/template-filler.js';
-import { logger } from '../../shared/logger.js';
 
 // Resolve relative to this source file, not CWD — avoids breakage when
 // the process is started from a different directory (e.g., Docker WORKDIR)
@@ -21,8 +21,9 @@ export class PuppeteerHtmlVisualGenerator implements VisualGenerator {
         'visualTemplate.template is required but missing or empty. Set skipVisual: true to skip visual generation, or provide a template name.',
       );
     }
-    const width = (templateConfig?.config as any)?.width ?? 1200;
-    const height = (templateConfig?.config as any)?.height ?? 628;
+    const typedConfig = asVisualTemplateConfig(templateConfig);
+    const width = typedConfig.config?.width ?? 1200;
+    const height = typedConfig.config?.height ?? 628;
 
     // Load template from filesystem
     const templatePath = path.join(TEMPLATES_DIR, `${templateName}.html`);

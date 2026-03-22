@@ -2,7 +2,6 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { ContentGenerator, ContentGeneratorInput, ContentGeneratorOutput } from './types.js';
 import { fillPromptTemplate } from '../../shared/template-filler.js';
 import { parseLlmResponse } from '../../shared/parse-llm-response.js';
-import { logger } from '../../shared/logger.js';
 
 interface ClaudeConfig {
   apiKey: string;

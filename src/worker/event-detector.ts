@@ -2,19 +2,21 @@ import { eq, and } from 'drizzle-orm';
 import { triggerRules } from '../shared/schema/trigger-rules.js';
 import { contentTemplates } from '../shared/schema/content-templates.js';
 import { verticals } from '../shared/schema/verticals.js';
-import { FIRE_MODES, TEMPLATE_SELECTION, JOB_TYPES } from '../shared/constants.js';
+import { FIRE_MODES, JOB_TYPES } from '../shared/constants.js';
 import type { DB } from '../shared/db.js';
 import type { DetectedEvent } from '../domain/detected-event.js';
 import type { JobQueue } from '../plugins/job-queue/types.js';
 import {
   DefaultTriggerEvaluator,
-  validateContentConfig,
   matchesEvent,
   evaluatePredicates,
   type TriggerEvaluator,
   type RuleInput,
 } from '../domain/trigger-evaluator.js';
+import { resolveTemplates } from '../domain/template-resolver.js';
+import { asVerticalConfig, asRuleCondition, asContentConfig } from '../domain/config-parsers.js';
 import { createRegistry, type PluginRegistry } from '../plugins/registry.js';
+import type { LoggerLike } from '../shared/logger.js';
 
 export function createTriggerEvaluatorRegistry(): PluginRegistry<TriggerEvaluator> {
   const registry = createRegistry<TriggerEvaluator>();
@@ -26,11 +28,7 @@ interface EventDetectorDeps {
   db: DB;
   jobQueue: JobQueue;
   evaluatorRegistry: PluginRegistry<TriggerEvaluator>;
-  logger: {
-    info: (...args: any[]) => void;
-    warn: (...args: any[]) => void;
-    error: (...args: any[]) => void;
-  };
+  logger: LoggerLike;
 }
 
 export class EventDetector {
@@ -49,7 +47,8 @@ export class EventDetector {
       .select()
       .from(verticals)
       .where(eq(verticals.id, verticalId));
-    const evaluatorName = (vertical?.config as any)?.defaults?.triggerEvaluator ?? 'default';
+    const evaluatorName =
+      asVerticalConfig(vertical?.config).defaults?.triggerEvaluator ?? 'default';
     const evaluator = this.deps.evaluatorRegistry.resolve(evaluatorName, {});
 
     const rules = await this.deps.db
@@ -71,22 +70,8 @@ export class EventDetector {
       for (const rule of rules) {
         if (rule.fireMode === FIRE_MODES.SCHEDULED) continue;
 
-        const condition = rule.condition as any;
-        const contentConfig = rule.contentConfig as any;
-
-        if (!validateContentConfig(contentConfig)) {
-          this.deps.logger.error(
-            { rule: rule.name },
-            'Misconfigured content_config — skipping rule',
-          );
-          continue;
-        }
-
-        const ruleCondition = {
-          match: condition.match ?? {},
-          predicates: condition.predicates ?? [],
-          logic: (condition.logic ?? 'AND') as 'AND' | 'OR',
-        };
+        const contentConfig = asContentConfig(rule.contentConfig);
+        const ruleCondition = asRuleCondition(rule.condition);
 
         // Build rule input with CURRENT in-memory predicate state (before evaluation)
         const ruleInput: RuleInput = {
@@ -120,9 +105,9 @@ export class EventDetector {
           this.deps.logger.info(
             {
               rule: rule.name,
-              event: (event.data as any).instrument ?? event.type,
-              changePct: Number(((event.data as any).changePct ?? 0).toFixed(4)),
-              threshold: condition.predicates?.[0]?.value,
+              event: (event.data.instrument as string) ?? event.type,
+              changePct: Number(Number(event.data.changePct ?? 0).toFixed(4)),
+              threshold: ruleCondition.predicates?.[0]?.value,
               cooldownExpired:
                 !rule.lastFiredAt || Date.now() - rule.lastFiredAt.getTime() >= rule.cooldownMs,
             },
@@ -131,7 +116,6 @@ export class EventDetector {
           continue;
         }
 
-        // Resolve and validate ALL configured templates BEFORE consuming cooldown
         const allTemplates = await this.deps.db
           .select()
           .from(contentTemplates)
@@ -139,39 +123,28 @@ export class EventDetector {
             and(eq(contentTemplates.verticalId, verticalId), eq(contentTemplates.enabled, true)),
           );
 
-        const resolvedTemplates = allTemplates.filter(t =>
-          contentConfig.templateNames.includes(t.name),
-        );
+        const resolution = resolveTemplates(contentConfig, allTemplates);
 
-        const resolvedNames = new Set(resolvedTemplates.map(t => t.name));
-        const missingNames = contentConfig.templateNames.filter(
-          (n: string) => !resolvedNames.has(n),
-        );
-
-        if (missingNames.length > 0) {
+        if (!resolution.ok) {
           this.deps.logger.error(
             {
               rule: rule.name,
-              missingNames,
-              configuredNames: contentConfig.templateNames,
+              reason: resolution.reason,
+              ...(resolution.reason === 'missing-templates'
+                ? { missingNames: resolution.missingNames }
+                : {}),
             },
-            'Some configured template names not found or disabled — skipping without consuming cooldown',
+            resolution.reason === 'invalid-content-config'
+              ? 'Misconfigured content_config — skipping rule'
+              : 'Some configured template names not found or disabled — skipping without consuming cooldown',
           );
           continue;
         }
 
-        let selectedTemplates = resolvedTemplates;
-        if (
-          contentConfig.templateSelection === TEMPLATE_SELECTION.RANDOM &&
-          selectedTemplates.length > 0
-        ) {
-          selectedTemplates = [
-            selectedTemplates[Math.floor(Math.random() * selectedTemplates.length)],
-          ];
-        }
+        const selectedTemplates = resolution.selectedTemplates;
 
         this.deps.logger.info(
-          { rule: rule.name, event: (event.data as any).instrument ?? event.type },
+          { rule: rule.name, event: (event.data.instrument as string) ?? event.type },
           'Trigger rule fired',
         );
 

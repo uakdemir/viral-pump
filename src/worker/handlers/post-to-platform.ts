@@ -4,7 +4,6 @@ import { contentItems } from '../../shared/schema/content-items.js';
 import { contentTemplates } from '../../shared/schema/content-templates.js';
 import { accounts } from '../../shared/schema/accounts.js';
 import { POST_STATUS } from '../../shared/constants.js';
-import { DryRunPostingStrategy } from '../../plugins/posting-strategies/dry-run.js';
 import type { DB } from '../../shared/db.js';
 import type { Job } from '../../plugins/job-queue/types.js';
 import type {
@@ -14,6 +13,8 @@ import type {
 } from '../../plugins/posting-strategies/types.js';
 import type { AssetStore } from '../../plugins/asset-store/types.js';
 import type { PluginRegistry } from '../../plugins/registry.js';
+import { asAccountConfig } from '../../plugins/posting-strategies/account-config.js';
+import type { LoggerLike } from '../../shared/logger.js';
 
 interface PostToPlatformDeps {
   db: DB;
@@ -21,11 +22,7 @@ interface PostToPlatformDeps {
   appCredentials: { apiKey: string; apiSecret: string };
   assetStore: AssetStore;
   assetDir: string;
-  logger: {
-    info: (...args: any[]) => void;
-    warn: (...args: any[]) => void;
-    error: (...args: any[]) => void;
-  };
+  logger: LoggerLike;
 }
 
 export async function handlePostToPlatform(job: Job, deps: PostToPlatformDeps): Promise<void> {
@@ -52,21 +49,21 @@ export async function handlePostToPlatform(job: Job, deps: PostToPlatformDeps): 
 
   // Step 1: Resolve posting strategy
   const accountCreds = account.credentials as Record<string, unknown>;
-  const accountConfig = account.config as Record<string, unknown>;
-  const strategyName = (accountConfig.postingStrategy as string) ?? 'twitter-api';
+  const accountConfig = asAccountConfig(account.config);
+  const strategyName = accountConfig.postingStrategy ?? 'twitter-api';
 
   // Pass full merged credentials — each strategy constructor picks what it needs
   const strategyConfig = {
     ...deps.appCredentials,
     ...(accountCreds as Record<string, unknown>),
-    ...(accountConfig as Record<string, unknown>),
+    ...accountConfig,
   };
 
   // Resolve strategy — unknown/misspelled strategy names are config errors, not transient failures
   let postingStrategy: PostingStrategy;
   try {
     postingStrategy = deps.postingStrategyRegistry.resolve(strategyName, strategyConfig);
-  } catch (err) {
+  } catch {
     await deps.db
       .update(posts)
       .set({
@@ -97,7 +94,7 @@ export async function handlePostToPlatform(job: Job, deps: PostToPlatformDeps): 
   }
 
   // Merge platformMeta: account defaults + template overrides
-  const accountMeta = (accountConfig.platformMeta ?? {}) as Record<string, unknown>;
+  const accountMeta = accountConfig.platformMeta ?? {};
   const templateMeta = (template?.platformMeta ?? {}) as Record<string, unknown>;
   const platformMeta = { ...accountMeta, ...templateMeta };
 
@@ -122,9 +119,11 @@ export async function handlePostToPlatform(job: Job, deps: PostToPlatformDeps): 
   }
 
   // Step 4: Dry-run check — validate passed, skip real post
-  const isDryRun = (accountConfig.dryRun as boolean) ?? false;
+  const isDryRun = accountConfig.dryRun ?? false;
   if (isDryRun) {
-    const dryRunStrategy = new DryRunPostingStrategy({ outputDir: deps.assetDir + '/dry-run' });
+    const dryRunStrategy = deps.postingStrategyRegistry.resolve('dry-run', {
+      outputDir: deps.assetDir + '/dry-run',
+    });
     const result = await dryRunStrategy.post(postInput);
     await deps.db
       .update(posts)

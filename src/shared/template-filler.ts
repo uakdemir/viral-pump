@@ -1,3 +1,5 @@
+import { htmlEscape } from './html.js';
+
 function resolvePath(obj: Record<string, unknown>, path: string): unknown {
   return path.split('.').reduce<unknown>((current, key) => {
     if (current != null && typeof current === 'object') {
@@ -5,14 +7,6 @@ function resolvePath(obj: Record<string, unknown>, path: string): unknown {
     }
     return undefined;
   }, obj);
-}
-
-function htmlEscape(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
 }
 
 function fill(template: string, context: Record<string, unknown>, escapeHtml: boolean): string {

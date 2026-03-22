@@ -1,4 +1,5 @@
 import type { PostingStrategy, PostInput, PostResult } from './types.js';
+import { validatePostInput } from './validation.js';
 import { logger } from '../../shared/logger.js';
 
 interface PinterestApiConfig {
@@ -16,37 +17,26 @@ export class PinterestApiPostingStrategy implements PostingStrategy {
   }
 
   validateInput(input: PostInput): void {
-    if (input.text.length > MAX_TEXT_LENGTH) {
-      throw new Error(
-        `Pinterest description exceeds ${MAX_TEXT_LENGTH} characters (got ${input.text.length})`,
-      );
-    }
+    validatePostInput(input, {
+      platformName: 'Pinterest',
+      maxTextLength: MAX_TEXT_LENGTH,
+      maxFileSizeBytes: MAX_FILE_SIZE_BYTES,
+      maxFileSizeLabel: '20 MB',
+      requiresMedia: true,
+      allowedMediaTypes: ['image'],
+      allowedMimeTypes: ['image/jpeg', 'image/png'],
+    });
 
-    if (!input.media) {
-      throw new Error('Pinterest requires media (image)');
-    }
-
-    if (input.media.type !== 'image') {
-      throw new Error(`Pinterest strategy only supports image media (got ${input.media.type})`);
-    }
-
-    const allowedMimes = ['image/jpeg', 'image/png'];
-    if (input.media.mimeType && !allowedMimes.includes(input.media.mimeType)) {
-      throw new Error(`Pinterest only accepts JPEG/PNG (got ${input.media.mimeType})`);
-    }
-
+    // Platform-specific: boardId required
     if (!input.platformMeta?.boardId) {
       throw new Error('Pinterest requires platformMeta.boardId');
     }
 
-    if (input.media.fileSizeBytes && input.media.fileSizeBytes > MAX_FILE_SIZE_BYTES) {
+    // Platform-specific: minimum width
+    if (input.media && input.media.width && input.media.width < 600) {
       throw new Error(
-        `Media file size exceeds 20 MB limit (got ${input.media.fileSizeBytes} bytes)`,
+        `Pinterest requires minimum image width of 600px (got ${input.media.width}px)`,
       );
-    }
-
-    if (input.media.width && input.media.width < 600) {
-      throw new Error(`Pinterest requires image width >= 600px (got ${input.media.width}px)`);
     }
   }
 

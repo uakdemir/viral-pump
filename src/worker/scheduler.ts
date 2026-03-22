@@ -1,6 +1,6 @@
 import { eq, and, sql } from 'drizzle-orm';
 import { CronExpressionParser } from 'cron-parser';
-import { FIRE_MODES, JOB_TYPES, TEMPLATE_SELECTION } from '../shared/constants.js';
+import { FIRE_MODES, JOB_TYPES } from '../shared/constants.js';
 import { dataSources } from '../shared/schema/data-sources.js';
 import { triggerRules } from '../shared/schema/trigger-rules.js';
 import { contentTemplates } from '../shared/schema/content-templates.js';
@@ -11,7 +11,21 @@ import type { DetectedEvent } from '../domain/detected-event.js';
 import { createRegistry, type PluginRegistry } from '../plugins/registry.js';
 import { CoinGeckoProvider } from '../plugins/data-sources/coingecko.js';
 import { ExchangeRateProvider } from '../plugins/data-sources/exchangerate.js';
-import { validateContentConfig } from '../domain/trigger-evaluator.js';
+import { resolveTemplates } from '../domain/template-resolver.js';
+import { asContentConfig } from '../domain/config-parsers.js';
+import type { LoggerLike } from '../shared/logger.js';
+
+/** Shape of the raw SQL row returned by the scheduled trigger claim query */
+interface ClaimedScheduledRow {
+  id: string;
+  name: string;
+  vertical_id: string;
+  schedule: string;
+  content_config: unknown;
+  cooldown_ms: number;
+  last_fired_at: string | null;
+  next_scheduled_at: string;
+}
 
 export function createDataSourceRegistry(): PluginRegistry<DataSourceProvider> {
   const registry = createRegistry<DataSourceProvider>();
@@ -24,11 +38,7 @@ interface SchedulerDeps {
   db: DB;
   registry: PluginRegistry<DataSourceProvider>;
   onEvents: (events: DetectedEvent[], verticalId: string) => Promise<void>;
-  logger: {
-    info: (...args: any[]) => void;
-    warn: (...args: any[]) => void;
-    error: (...args: any[]) => void;
-  };
+  logger: LoggerLike;
 }
 
 export class Scheduler {
@@ -89,10 +99,10 @@ export class Scheduler {
             sourceId,
             eventCount: events.length,
             events: events.map(e => ({
-              instrument: (e.data as any).instrument,
-              price: (e.data as any).price,
-              previousPrice: (e.data as any).previousPrice,
-              changePct: Number(((e.data as any).changePct ?? 0).toFixed(4)),
+              instrument: e.data.instrument as string,
+              price: e.data.price as number,
+              previousPrice: e.data.previousPrice as number,
+              changePct: Number(Number(e.data.changePct ?? 0).toFixed(4)),
             })),
           },
           'Poll completed',
@@ -182,21 +192,11 @@ export class Scheduler {
 
       if (!claimedRows.length) return; // no due rules
 
-      const rule = claimedRows[0] as any;
+      const rule = claimedRows[0] as unknown as ClaimedScheduledRow;
       ruleName = rule.name;
       const scheduledAt = rule.next_scheduled_at;
 
-      // Validate content_config
-      const contentConfig = rule.content_config;
-      if (!validateContentConfig(contentConfig)) {
-        this.deps.logger.error(
-          { rule: rule.name, contentConfig },
-          'Misconfigured content_config — skipping',
-        );
-        await this.advanceScheduleInTx(tx, rule.id, rule.schedule);
-        fired = true;
-        return;
-      }
+      const contentConfig = asContentConfig(rule.content_config);
 
       // Check cooldown
       if (rule.last_fired_at) {
@@ -208,11 +208,6 @@ export class Scheduler {
         }
       }
 
-      // Resolve templates
-      const templateNames: string[] = contentConfig.templateNames;
-      selectionMode = contentConfig.templateSelection;
-
-      // Resolve ALL configured templates first — validate before selecting
       const templates = await tx
         .select()
         .from(contentTemplates)
@@ -223,30 +218,28 @@ export class Scheduler {
           ),
         );
 
-      const resolvedTemplates = templates.filter(t => templateNames.includes(t.name));
-      const resolvedNames = new Set(resolvedTemplates.map(t => t.name));
-      const missingNames = templateNames.filter((n: string) => !resolvedNames.has(n));
+      const resolution = resolveTemplates(contentConfig, templates);
 
-      if (missingNames.length > 0) {
+      if (!resolution.ok) {
         this.deps.logger.error(
-          { rule: rule.name, missingNames, templateNames },
-          'Some configured template names not found or disabled — skipping',
+          {
+            rule: rule.name,
+            reason: resolution.reason,
+            ...(resolution.reason === 'missing-templates'
+              ? { missingNames: resolution.missingNames }
+              : {}),
+          },
+          resolution.reason === 'invalid-content-config'
+            ? 'Misconfigured content_config — skipping'
+            : 'Some configured template names not found or disabled — skipping',
         );
         await this.advanceScheduleInTx(tx, rule.id, rule.schedule);
         fired = true;
         return;
       }
 
-      // Apply selection mode after full validation
-      let matchedTemplates = resolvedTemplates;
-      if (
-        contentConfig.templateSelection === TEMPLATE_SELECTION.RANDOM &&
-        matchedTemplates.length > 0
-      ) {
-        matchedTemplates = [matchedTemplates[Math.floor(Math.random() * matchedTemplates.length)]];
-      }
-
-      templateNamesList = matchedTemplates.map(t => t.name);
+      templateNamesList = resolution.selectedTemplates.map(t => t.name);
+      selectionMode = contentConfig.templateSelection;
 
       // Create synthetic event
       const syntheticEvent = {
@@ -263,7 +256,7 @@ export class Scheduler {
       };
 
       // Insert jobs — use (rule_id, scheduled_at, template_id) for dedup
-      for (const template of matchedTemplates) {
+      for (const template of resolution.selectedTemplates) {
         await tx.insert(jobQueueTable).values({
           type: JOB_TYPES.GENERATE_CONTENT,
           payload: {

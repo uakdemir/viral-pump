@@ -1,15 +1,16 @@
 import React from 'react';
+import type { ContentItemAiConfig, ContentItemCost } from '../api-types.js';
 
 interface ContentCardProps {
   item: {
     id: string;
-    generatedText?: string;
-    finalText?: string;
-    visualUrl?: string;
+    generatedText?: string | null;
+    finalText?: string | null;
+    visualUrl?: string | null;
     generationStatus: string;
     reviewStatus: string;
-    aiConfig: Record<string, unknown>;
-    cost: Record<string, unknown>;
+    aiConfig: ContentItemAiConfig;
+    cost: ContentItemCost;
     createdAt: string;
   };
   onApprove?: (id: string) => void;
@@ -35,8 +36,8 @@ const btnBase: React.CSSProperties = {
 };
 
 export function ContentCard({ item, onApprove, onEdit, onReject }: ContentCardProps) {
-  const templateName = (item.aiConfig as any)?.templateName ?? 'Unknown';
-  const tokensUsed = (item.cost as any)?.apiTokens ?? 0;
+  const templateName = item.aiConfig.templateName ?? 'Unknown';
+  const tokensUsed = item.cost.apiTokens ?? 0;
   const timeAgo = getTimeAgo(item.createdAt);
 
   return (
@@ -46,7 +47,13 @@ export function ContentCard({ item, onApprove, onEdit, onReject }: ContentCardPr
           <img
             src={item.visualUrl}
             alt="Preview"
-            style={{ width: '180px', height: '94px', objectFit: 'cover', borderRadius: '6px', background: '#0f172a' }}
+            style={{
+              width: '180px',
+              height: '94px',
+              objectFit: 'cover',
+              borderRadius: '6px',
+              background: '#0f172a',
+            }}
           />
         )}
         <div style={{ flex: 1, minWidth: '200px' }}>
@@ -62,17 +69,26 @@ export function ContentCard({ item, onApprove, onEdit, onReject }: ContentCardPr
       {(onApprove || onEdit || onReject) && (
         <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
           {onApprove && (
-            <button onClick={() => onApprove(item.id)} style={{ ...btnBase, background: '#22c55e', color: '#000' }}>
+            <button
+              onClick={() => onApprove(item.id)}
+              style={{ ...btnBase, background: '#22c55e', color: '#000' }}
+            >
               Approve
             </button>
           )}
           {onEdit && (
-            <button onClick={() => onEdit(item.id)} style={{ ...btnBase, background: '#3b82f6', color: '#fff' }}>
+            <button
+              onClick={() => onEdit(item.id)}
+              style={{ ...btnBase, background: '#3b82f6', color: '#fff' }}
+            >
               Edit
             </button>
           )}
           {onReject && (
-            <button onClick={() => onReject(item.id)} style={{ ...btnBase, background: '#ef4444', color: '#fff' }}>
+            <button
+              onClick={() => onReject(item.id)}
+              style={{ ...btnBase, background: '#ef4444', color: '#fff' }}
+            >
               Reject
             </button>
           )}

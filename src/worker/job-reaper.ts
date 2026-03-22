@@ -1,12 +1,13 @@
 import { sql } from 'drizzle-orm';
 import type { DB } from '../shared/db.js';
+import type { LoggerLike } from '../shared/logger.js';
 
 export class JobReaper {
   private timer: NodeJS.Timeout | undefined;
   private db: DB;
-  private logger: { info: (...args: any[]) => void };
+  private logger: LoggerLike;
 
-  constructor(db: DB, logger: { info: (...args: any[]) => void }) {
+  constructor(db: DB, logger: LoggerLike) {
     this.db = db;
     this.logger = logger;
   }

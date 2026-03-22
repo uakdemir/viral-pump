@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { eq, desc, and, gte, lte, sql } from 'drizzle-orm';
+import type { SQLWrapper } from 'drizzle-orm/sql';
 import { posts } from '../../shared/schema/posts.js';
 import { contentItems } from '../../shared/schema/content-items.js';
 import { accounts } from '../../shared/schema/accounts.js';
@@ -7,6 +8,14 @@ import { verticals } from '../../shared/schema/verticals.js';
 import { POST_STATUS, JOB_TYPES } from '../../shared/constants.js';
 import type { DB } from '../../shared/db.js';
 import type { JobQueue } from '../../plugins/job-queue/types.js';
+
+interface PostsSummaryRow {
+  total_posts: number;
+  total_views: number;
+  total_likes: number;
+  total_shares: number;
+  total_comments: number;
+}
 
 export function registerPostsRoutes(app: FastifyInstance, db: DB, jobQueue: JobQueue) {
   // GET /api/posts?status=&platform=&vertical=&since=&until=&summary=true
@@ -21,14 +30,12 @@ export function registerPostsRoutes(app: FastifyInstance, db: DB, jobQueue: JobQ
     };
 
     // Build WHERE conditions
-    const conditions: any[] = [];
+    const conditions: (SQLWrapper | undefined)[] = [];
     if (status) conditions.push(eq(posts.status, status));
     if (platform) conditions.push(eq(accounts.platform, platform));
     if (vertical) conditions.push(eq(verticals.slug, vertical));
     if (since) conditions.push(gte(posts.postedAt, new Date(since)));
     if (until) conditions.push(lte(posts.postedAt, new Date(until)));
-
-    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
     // Main query — paginated items
     let query = db
@@ -57,8 +64,10 @@ export function registerPostsRoutes(app: FastifyInstance, db: DB, jobQueue: JobQ
       .leftJoin(verticals, eq(contentItems.verticalId, verticals.id))
       .orderBy(desc(posts.createdAt));
 
-    if (whereClause) {
-      query = query.where(whereClause) as any;
+    // Drizzle's query builder changes type on each chained call, requiring `as any` for reassignment.
+    // The conditions array and and() call are fully typed; only the reassignment needs the cast.
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as typeof query;
     }
 
     const items = await query.limit(50);
@@ -84,7 +93,7 @@ export function registerPostsRoutes(app: FastifyInstance, db: DB, jobQueue: JobQ
           ${until ? sql`AND p.posted_at <= ${until}::timestamptz` : sql``}
       `);
 
-      const row = (summaryResult as any)[0] ?? {};
+      const row = (summaryResult as unknown as PostsSummaryRow[])[0] ?? ({} as PostsSummaryRow);
 
       return {
         items,

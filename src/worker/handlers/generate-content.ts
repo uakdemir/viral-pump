@@ -13,12 +13,14 @@ import type { DB } from '../../shared/db.js';
 import type { Job, JobQueue } from '../../plugins/job-queue/types.js';
 import type { ContentGenerator } from '../../plugins/content-generators/types.js';
 import type { PluginRegistry } from '../../plugins/registry.js';
+import { asVerticalConfig } from '../../domain/config-parsers.js';
+import type { LoggerLike } from '../../shared/logger.js';
 
 interface GenerateContentDeps {
   db: DB;
   jobQueue: JobQueue;
   contentGeneratorRegistry: PluginRegistry<ContentGenerator>;
-  logger: { info: (...args: any[]) => void; error: (...args: any[]) => void };
+  logger: LoggerLike;
 }
 
 export async function handleGenerateContent(job: Job, deps: GenerateContentDeps): Promise<void> {
@@ -43,7 +45,7 @@ export async function handleGenerateContent(job: Job, deps: GenerateContentDeps)
 
   // Get vertical config for defaults
   const [vertical] = await deps.db.select().from(verticals).where(eq(verticals.id, verticalId));
-  const defaults = (vertical?.config as any)?.defaults ?? {};
+  const defaults = asVerticalConfig(vertical?.config).defaults ?? {};
 
   // Resolve content generator
   const genConfig = template.generationConfig as Record<string, unknown>;
@@ -58,7 +60,7 @@ export async function handleGenerateContent(job: Job, deps: GenerateContentDeps)
     .values({
       verticalId,
       templateId,
-      eventData: eventData as any,
+      eventData: eventData as unknown as Record<string, unknown>,
       generationStatus: GENERATION_STATUS.GENERATING,
       reviewStatus: REVIEW_STATUS.DRAFT,
       aiConfig: { provider: providerName, model, templateName: template.name },
