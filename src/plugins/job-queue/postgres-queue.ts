@@ -81,7 +81,8 @@ export class PostgresJobQueue implements JobQueue {
           locked_by = NULL,
           locked_at = NULL,
           lease_expires_at = NULL,
-          error = ${JSON.stringify(errorJson)}::jsonb
+          error = ${JSON.stringify(errorJson)}::jsonb,
+          updated_at = now()
       WHERE id = ${jobId}
     `);
   }

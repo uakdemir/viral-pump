@@ -41,3 +41,24 @@ export const TEMPLATE_SELECTION = {
 } as const;
 
 export const DEFAULT_LLM_MODEL = 'claude-haiku-4-5-20251001';
+
+export const HEALTH_THRESHOLDS = {
+  JOB_QUEUE: {
+    PENDING_YELLOW: 10,
+    PENDING_RED: 51,
+    FAILED_HOUR_YELLOW: 1,
+    FAILED_HOUR_RED: 6,
+  },
+  FAILURE_RATE: {
+    YELLOW: 0.05,
+    RED: 0.15,
+  },
+  DATA_SOURCE: {
+    OVERDUE_YELLOW_MULTIPLIER: 2,
+    OVERDUE_RED_MULTIPLIER: 5,
+  },
+  ACCOUNTS: {
+    FAILED_COUNT_YELLOW: 1,
+    FAILED_RATIO_RED: 0.5,
+  },
+} as const;

@@ -195,3 +195,56 @@ export interface MetricsHistoryResponse {
   postId: string;
   snapshots: MetricsSnapshotDTO[];
 }
+
+// ---------------------------------------------------------------------------
+// /api/health/status — GET response
+// ---------------------------------------------------------------------------
+
+export interface HealthSignalStatus {
+  status: 'green' | 'yellow' | 'red';
+}
+
+export interface JobQueueHealth extends HealthSignalStatus {
+  pending: number;
+  processing: number;
+  failedLastHour: number;
+}
+
+export interface FailureRateHealth extends HealthSignalStatus {
+  total24h: number;
+  failed24h: number;
+  rate: number;
+}
+
+export interface DataSourceHealth {
+  id: string;
+  provider: string;
+  status: 'green' | 'yellow' | 'red';
+  lastPolledAt: string | null;
+  pollIntervalMs: number;
+}
+
+export interface DataSourcesHealth extends HealthSignalStatus {
+  sources: DataSourceHealth[];
+}
+
+export interface AccountHealth {
+  id: string;
+  name: string;
+  platform: string;
+  status: 'green' | 'yellow' | 'red';
+  lastPostStatus: string | null;
+  lastPostAt: string | null;
+}
+
+export interface AccountsHealth extends HealthSignalStatus {
+  accounts: AccountHealth[];
+}
+
+export interface HealthStatusResponse {
+  jobQueue: JobQueueHealth;
+  failureRate: FailureRateHealth;
+  dataSources: DataSourcesHealth;
+  accounts: AccountsHealth;
+  overall: 'green' | 'yellow' | 'red';
+}

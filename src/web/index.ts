@@ -11,6 +11,7 @@ import { registerContentItemsRoutes } from './api/content-items.js';
 import { registerPostsRoutes } from './api/posts.js';
 import { registerVerticalsRoutes } from './api/verticals.js';
 import { registerMetricsRoutes } from './api/metrics.js';
+import { registerHealthRoutes } from './api/health.js';
 
 const logger = createChildLogger({ process: 'web' });
 const db = createDb(config.VIRAL_DATABASE_URL);
@@ -29,9 +30,10 @@ registerContentItemsRoutes(app, db, jobQueue);
 registerPostsRoutes(app, db, jobQueue);
 registerVerticalsRoutes(app, db);
 registerMetricsRoutes(app, db);
+registerHealthRoutes(app, db);
 
 // Health check
-app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
+app.get('/api/ping', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
 
 app.listen({ port: config.PORT, host: '0.0.0.0' }, err => {
   if (err) {

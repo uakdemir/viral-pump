@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { NavLink } from 'react-router-dom';
+import { HealthStatusStrip } from './HealthStatusStrip.js';
 
 const navStyle: React.CSSProperties = {
   display: 'flex',
@@ -46,24 +47,33 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
         {/* Desktop nav */}
         <div className="desktop-nav" style={{ display: 'flex', gap: '4px' }}>
-          <NavLink to="/review" style={({ isActive }) => isActive ? activeLinkStyle : linkStyle}>
+          <NavLink to="/review" style={({ isActive }) => (isActive ? activeLinkStyle : linkStyle)}>
             Review Queue
           </NavLink>
-          <NavLink to="/posts" style={({ isActive }) => isActive ? activeLinkStyle : linkStyle}>
+          <NavLink to="/posts" style={({ isActive }) => (isActive ? activeLinkStyle : linkStyle)}>
             Posts
           </NavLink>
-          <NavLink to="/verticals" style={({ isActive }) => isActive ? activeLinkStyle : linkStyle}>
+          <NavLink
+            to="/verticals"
+            style={({ isActive }) => (isActive ? activeLinkStyle : linkStyle)}
+          >
             Verticals
           </NavLink>
         </div>
+
+        <HealthStatusStrip />
 
         {/* Mobile hamburger */}
         <button
           onClick={() => setMenuOpen(!menuOpen)}
           className="mobile-menu-btn"
           style={{
-            display: 'none', background: 'none', border: 'none', color: '#f1f5f9',
-            fontSize: '24px', cursor: 'pointer',
+            display: 'none',
+            background: 'none',
+            border: 'none',
+            color: '#f1f5f9',
+            fontSize: '24px',
+            cursor: 'pointer',
           }}
         >
           {menuOpen ? '\u2715' : '\u2630'}
@@ -72,13 +82,25 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       {menuOpen && (
         <div style={mobileMenuStyle} className="mobile-nav">
-          <NavLink to="/review" onClick={() => setMenuOpen(false)} style={({ isActive }) => isActive ? activeLinkStyle : linkStyle}>
+          <NavLink
+            to="/review"
+            onClick={() => setMenuOpen(false)}
+            style={({ isActive }) => (isActive ? activeLinkStyle : linkStyle)}
+          >
             Review Queue
           </NavLink>
-          <NavLink to="/posts" onClick={() => setMenuOpen(false)} style={({ isActive }) => isActive ? activeLinkStyle : linkStyle}>
+          <NavLink
+            to="/posts"
+            onClick={() => setMenuOpen(false)}
+            style={({ isActive }) => (isActive ? activeLinkStyle : linkStyle)}
+          >
             Posts
           </NavLink>
-          <NavLink to="/verticals" onClick={() => setMenuOpen(false)} style={({ isActive }) => isActive ? activeLinkStyle : linkStyle}>
+          <NavLink
+            to="/verticals"
+            onClick={() => setMenuOpen(false)}
+            style={({ isActive }) => (isActive ? activeLinkStyle : linkStyle)}
+          >
             Verticals
           </NavLink>
         </div>
@@ -94,9 +116,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         }
       `}</style>
 
-      <main style={{ padding: '24px', maxWidth: '1200px', margin: '0 auto' }}>
-        {children}
-      </main>
+      <main style={{ padding: '24px', maxWidth: '1200px', margin: '0 auto' }}>{children}</main>
     </div>
   );
 }

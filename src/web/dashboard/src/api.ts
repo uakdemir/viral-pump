@@ -3,6 +3,7 @@ import type {
   PostsResponse,
   VerticalDTO,
   MetricsHistoryResponse,
+  HealthStatusResponse,
 } from './api-types.js';
 
 const BASE = '';
@@ -79,5 +80,12 @@ export async function toggleVertical(id: string) {
 
 export async function toggleTriggerRule(id: string) {
   const res = await fetch(`${BASE}/api/verticals/trigger-rules/${id}/toggle`, { method: 'PATCH' });
+  return res.json();
+}
+
+// Health Status
+export async function fetchHealthStatus(): Promise<HealthStatusResponse> {
+  const res = await fetch(`${BASE}/api/health/status`);
+  if (!res.ok) throw new Error(`Health check failed: ${res.status}`);
   return res.json();
 }
